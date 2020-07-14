@@ -15,7 +15,7 @@ stoch_epi_lib: An implementation of a dynamical systems method to estimate gene 
 
 ### Download a release
 
-Periodically, we provide a release of the tool as a stand-alone Windows executable with an installation tool. Please see the <a href="https://github.com/kordk/stoch_epi_lib/releases">releases</a> to download the latest version.
+Periodically, we may provide a release of the tool as a stand-alone executable with an installation tool. Please see the <a href="https://github.com/kordk/stoch_epi_lib/releases">releases</a> to download the latest version.
 
 ### From Source Code
 
