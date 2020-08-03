@@ -1,6 +1,9 @@
 # stoch_epi_lib
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
+
+This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv (https://bioxriv.org/XXX) and submitted for publication at the Pacific Symposium Biocomputing. 
+
 ## Requirements
 
      - Go (https://golang.org/)
@@ -115,7 +118,7 @@ Usage of ./stoch_epi_lib.amd64.linux:
 
 This demonstration assumes you are running a Linux distribution with a sh/bash/ksh shell.
 
-Download the files used in this demo from XXX.
+Download the files used in this demo from Synapse: https://www.synapse.org/#!Synapse:syn22255244/files
 
 There are four main steps to follow to generate the gene expression estimates. 
 
@@ -365,4 +368,6 @@ Jacob Kim: jk3709@cumc.columbia.edu
 Kord M. Kober: Kord.Kober@ucsf.edu
 
 ## Acknowledgements
-Support for this project was provided by the National Cancer Institute (CA233774). Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the National Institute of Health. This project was conceived as an interdisciplinary project as part of the "Short Course in Systems Biology - a foundation for interdisciplinary careers" (NIH XXXXXX) given by the Center for Complex Biological Systems at the University of California Irvine January 21 - February 8, 2019 in Irvine, CA.
+Support for this project was provided by the National Cancer Institute (CA233774). Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the National Institute of Health. This project was initially conceived as an interdisciplinary project as part of the "Short Course in Systems Biology - a foundation for interdisciplinary careers" at the Center for Complex Biological Systems at the University of California Irvine held Jan. 21 - Feb. 8, 2019 in Irvine, CA (NIH GM126365).
+
+This pipeline is to compute Reverse Gene Expression Score (RGES) published by Chen B. et al (Nature Communications, 2017). 
