@@ -370,4 +370,3 @@ Kord M. Kober: Kord.Kober@ucsf.edu
 ## Acknowledgements
 Support for this project was provided by the National Cancer Institute (CA233774). Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the National Institute of Health. This project was initially conceived as an interdisciplinary project as part of the "Short Course in Systems Biology - a foundation for interdisciplinary careers" at the Center for Complex Biological Systems at the University of California Irvine held Jan. 21 - Feb. 8, 2019 in Irvine, CA (NIH GM126365).
 
-This pipeline is to compute Reverse Gene Expression Score (RGES) published by Chen B. et al (Nature Communications, 2017). 
