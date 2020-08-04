@@ -2,7 +2,7 @@
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
 
-This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv (https://bioxriv.org/XXX) and submitted for publication at the Pacific Symposium Biocomputing. 
+This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and submitted for publication at the Pacific Symposium Biocomputing. 
 
 ## Requirements
 
@@ -274,11 +274,11 @@ Epigenetic loci to gene mappings.
 
 DoRothERA (PMID 29229604)
 
-| Filename | Description |
-| :----- | :---------- |
-| demo/A_confidenceregs.csv | XXX |
-| demo/regionAggregateInfo.full.tsv  | XXX |
-| k.csv | Mapping of the TF to the target genes for KEGG pathway XXX |
+| Filename | Description | Source |
+| :----- | :---------- | :---------- |
+| A_confidenceregs.csv | XX | N/A |
+| regionAggregateInfo.full.tsv  | XX | N/A |
+| k.csv | Mapping of the TF to the target genes for KEGG pathway XXX | N/A |
 
 Collect the genes in the network. For this example we are using genes in the KEGG pathway XXX:
 <pre>
