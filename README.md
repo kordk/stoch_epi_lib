@@ -2,7 +2,7 @@
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
 
-This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
+This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and arXiv (https://arxiv.org/abs/2008.01126) and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
 
 ## Requirements
 
