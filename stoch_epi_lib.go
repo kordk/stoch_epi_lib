@@ -664,15 +664,6 @@ func ComputeDerivSite(paramtype int, paramindex int,topStates []StateCount, site
       }
     }
 
-<<<<<<< HEAD
-=======
-    //as long as its not more I guess ok!
-    if new_like < (1 - math.Pow(10,float64(desc_tol)))*likaswego[len(likaswego)-1]{
-      num_nogood = 0
-      sites = new_sites
-      genes = new_genes
->>>>>>> d3a2cf5589242c4d24cb642dc30fd3d286bea85a
-
 
   case 3://mu
     paramcombo := gdotKap*(math.Pow(site.Alpha,site.Nu))/(site.Mu + math.Pow(site.Alpha,site.Nu))
