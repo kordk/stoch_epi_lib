@@ -278,6 +278,7 @@ DoRothERA (PMID 29229604)
 | :----- | :---------- | :---------- |
 | A_confidenceregs.csv | XX | N/A |
 | regionAggregateInfo.full.tsv  | XX | N/A |
+| de.symbols.txt | HUGO symbols of genes differentially expressed in GTP study | PMID 28925389 |
 | k.csv | Mapping of the TF to the target genes for KEGG pathway XXX | N/A |
 
 Collect the genes in the network. For this example we are using genes in the KEGG pathway XXX:
