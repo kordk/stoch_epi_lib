@@ -116,7 +116,7 @@ Usage of ./stoch_epi_lib.amd64.linux:
 
 ## Demo
 
-This demonstration assumes you are running a Linux distribution with a sh/bash/ksh shell.  Please see the DEMO.md file for detailed instructions.
+Please see the DEMO.md file for detailed instructions.
 
 
 ## Authors
