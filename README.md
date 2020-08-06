@@ -2,7 +2,7 @@
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
 
-This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on BioRxiv ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and arXiv (https://arxiv.org/abs/2008.01126) and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
+This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on bioRxiv Systems Biology ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and arXiv Molecular Networks (https://arxiv.org/abs/2008.01126) and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
 
 ## Requirements
 
@@ -350,7 +350,8 @@ stoch_epi_lib \
     -datafl="train.json" \
     -sitefl="go_in_jsons/sites.json" \
     -genefl="go_in_jsons/genes.json" \
-    -svfl="go_out_jsons/fitted" >stoch_epi_lib.ParamFit.train.log 2>&1
+    -svfl="go_out_jsons/fitted" \
+    >stoch_epi_lib.ParamFit.train.log 2>&1
 </pre>
 
 #### 3) Generate log likelihoods 
@@ -370,7 +371,11 @@ stoch_epi_lib \
     -LoadRands="rand.param.json" \
     -datafl="train.json" \
     -sitefl="go_out_jsons/fitted_sites.json" \
-    -genefl="go_out_jsons/fitted_genes.json" >stoch_epi_lib.Log2.train.log 2>&1
+    -genefl="go_out_jsons/fitted_genes.json" \
+    >stoch_epi_lib.Log2.train.log 2>&1
+    
+grep Log stoch_epi_lib.Log2.train.log
+# Log-Likelihood of was 17170.16313, average simulation did not jump on 534.90769/1000 attempts, average simulation time length was 0.01697
 </pre>
 
 | Filename | Description |
@@ -388,7 +393,11 @@ stoch_epi_lib \
     -LoadRands="rand.param.json" \
     -datafl="test.json" \
     -sitefl="go_out_jsons/fitted_sites.json" \
-    -genefl="go_out_jsons/fitted_genes.json" >stoch_epi_lib.Log2.test.log 2>&1
+    -genefl="go_out_jsons/fitted_genes.json" \
+    >stoch_epi_lib.Log2.test.log 2>&1
+    
+grep Log stoch_epi_lib.Log2.test.log
+# Log-Likelihood of was 4228.82033, average simulation did not jump on 500.27083/1000 attempts, average simulation time length was 0.01739
 </pre>
 
 
@@ -407,13 +416,15 @@ stoch_epi_lib \
     -mode=Eq \
     -EqLength=2000 \
     -DataScale Log2 \
+    -NumberCores=4 \
     -datafl="test.json" \
     -sitefl="go_out_jsons/fitted_sites.json" \
     -genefl="go_out_jsons/fitted_genes.json" \
-    -svfl="go_out_jsons/Eqs" >stoch_epi_lib.Eq.test.log 2>&1
+    -svfl="go_out_jsons/Eqs" \
+    >stoch_epi_lib.Eq.test.log 2>&1
 </pre>
 
-Generate expression estimates and plot the distributions for each individual for each gene
+Generate expression estimates and plot the distributions for each individual for each gene: pid/plots/gene.png
 <pre>
 ALL=$PWD/plotAllEq.sh
 cp /dev/null $ALL
@@ -432,7 +443,7 @@ for PID in `cat $PIDLIST | xargs`; do
 
   cat << EOF > $ONE
 #!/bin/sh -x
-estGxFromEqDist.py -l eqs.list -D -m ../test.json -i $PID
+../estGxFromEqDist.py -l eqs.list -D -m ../test.json -i $PID
 EOF
 
   chmod 755 $ONE
@@ -440,25 +451,29 @@ EOF
   popd
   let P+=1
 done
+
 chmod 755 $ALL
-./$ALL >$ALL.log 2>&1
+$ALL >$ALL.log 2>&1
 </pre>
 
-Generate observed vs. predicted Plots for all genes
+Generate observed vs. predicted Plots for all genes across participants: plots/gene.png
 <pre>
 ONE=plotOneObsPred.sh
 N=0
 find $PWD -name eqDistGxSummary.pickle > eqDistGxSummary.pickle.list
 wc -l eqDistGxSummary.pickle.list
+
 cat << EOF > $ONE
 #!/bin/sh -x
 estGxFromEqDistPlotByGene.py -D -l eqDistGxSummary.pickle.list -p plots
 EOF 
+
 chmod 755 $ONE
 ./$ONE >$ONE.log 2>&1
 </pre>
 
-If you have performed multiple shuffles (e.g., n=100) each in separate subdirectories (e.g., 0/ to 99/), the results can be plotted across all of them and the mean RSME calculated:
+
+If you have performed multiple shuffles (e.g., n=100) each in separate subdirectories (e.g., 0/ to 99/), the results can be plotted across all of them and the mean RSME calculated. plots/gene_<plot type>.png This is not shown for this demo.
 <pre>
 OUT=eqDistGxSummary.pickle.fold.list
 cp /dev/null $OUT
@@ -468,7 +483,8 @@ while [ $N -lt 100 ]; do
     let N+=1
 done
 
-estGxFromEqDistPlotByGeneJoinFolds.py -D -s -l eqDistGxSummary.pickle.fold.list \
+estGxFromEqDistPlotByGeneJoinFolds.py -D -s \
+     -l eqDistGxSummary.pickle.fold.list \
     >estGxFromEqDistPlotByGeneJoinFolds.small.py.log 2>&1
     
 grep "Mean RSME" estGxFromEqDistPlotByGeneJoinFolds.small.py.log  | awk '{print $4, $10}' | column -t
