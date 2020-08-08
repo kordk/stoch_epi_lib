@@ -118,6 +118,9 @@ Usage of ./stoch_epi_lib.amd64.linux:
 
 Please see the DEMO.md file for detailed instructions.
 
+## FAQ
+
+Please see the FAQ.md file for frequently asked questions.
 
 ## Authors
 
