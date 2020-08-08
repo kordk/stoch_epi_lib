@@ -1,6 +1,6 @@
 # Frequently Asked Quesitons (FAQ)
 
-1. "TypeError: 'bool' object is not iterable" when creating the gene regulatory network with build_model.py.  
+#### 1. "TypeError: 'bool' object is not iterable" when creating the gene regulatory network with build_model.py.  
 
 <pre>
 build_model.py:129: FutureWarning: elementwise comparison failed; returning scalar instead, but in the future will perform elementwise comparison
@@ -19,7 +19,7 @@ print([si for si in allsites if si not in arrow_sites])
 print(len(allsites)==len(arrow_sites))
 </pre>
 
-2. The ParamFit method is returning an infinite -log likelihood and stops. 
+#### 2. The ParamFit method is returning an infinite -log likelihood and stops. 
 <pre>
 [MasterFit] Computing initial likelihood.
 [MasterFit] Initial likelihood: +Inf No jump on 973.65641/1000 draws.
