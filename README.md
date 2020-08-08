@@ -123,13 +123,13 @@ Please see the FAQ.md file for frequently asked questions.
 
 ## Citing stoch_epi_lib
 
-If you use stoch_epi_lib for your research please cite the posted manuscript:
+If you use stoch_epi_lib for your research please cite the posted preprint manuscript:
 
-<a href="https://www.biorxiv.org/content/10.1101/2020.08.03.234740v1"> Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. bioRxiv 2020.08.03.234740; doi: https://doi.org/10.1101/2020.08.03.234740 </a>
+Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. bioRxiv. 2020. <a href="https://www.biorxiv.org/content/10.1101/2020.08.03.234740v1"> 2020.08.03.234740</a>; DOI: <a href="https://doi.org/10.1101/2020.08.03.234740">https://doi.org/10.1101/2020.08.03.234740</a>
 
 or 
 
-<a href="https://arxiv.org/abs/2008.01126"> Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. arXiv 2008.01126</a>
+ Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. arXiv. 2020. <a href="<a href="https://arxiv.org/abs/2008.01126">2008.01126</a>
 
 
 ## Authors
