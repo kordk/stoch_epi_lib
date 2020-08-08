@@ -10,7 +10,7 @@ This software and pipeline is to estimate gene expression using the stoch_epi_li
                     github.com/montanaflynn/stats, 
                     gonum.org/v1/gonum/integrate/quad, 
                     github.com/aclements/go-gg/generic/slice
-     - Python 2.7
+     - Python 2.7, 3.0
      - Python modules : pandas, numpy, matplotlib, scipy, seaborn, joblib, cycler, smtplib, sklearn, simplejson
      
 ## Installation instructions
