@@ -1,8 +1,7 @@
 # stoch_epi_lib
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
-
-This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on bioRxiv Systems Biology ( https://biorxiv.org/cgi/content/short/2020.08.03.234740v1) and arXiv Molecular Networks (https://arxiv.org/abs/2008.01126) and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
+This software and pipeline is to estimate gene expression using the stoch_epi_lib program. The method is described in a manuscript available in pre-print on <a href="https://biorxiv.org/cgi/content/short/2020.08.03.234740v1"> bioRxiv Systems Biology </a> and <a href="https://arxiv.org/abs/2008.01126"> arXiv Molecular Networks </a> and submitted for publication at the <a href="https://psb.stanford.edu/">Pacific Symposium Biocomputing</a>. 
 
 ## Requirements
 
@@ -121,6 +120,17 @@ Please see the DEMO.md file for detailed instructions.
 ## FAQ
 
 Please see the FAQ.md file for frequently asked questions.
+
+## Citing stoch_epi_lib
+
+If you use stoch_epi_lib for your research please cite the posted manuscript:
+
+<a href="https://www.biorxiv.org/content/10.1101/2020.08.03.234740v1"> Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. bioRxiv 2020.08.03.234740; doi: https://doi.org/10.1101/2020.08.03.234740 </a>
+
+or 
+
+<a href="https://arxiv.org/abs/2008.01126"> Epigenome Prediction of Gene Expression using a Dynamical System Approach. James Brunner, Jacob Kim, Timothy Downing, Eric Mjolsness, Kord M. Kober. arXiv 2008.01126</a>
+
 
 ## Authors
 
