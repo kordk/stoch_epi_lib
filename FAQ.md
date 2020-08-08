@@ -11,6 +11,8 @@
 </pre>
 
 We’ll get infinite -log likelihood whenever the model never gets close to the data, which becomes much more likely as we increase the network size. 
+
 First, generate an equilibrium distribution with random parameter for a few samples to see how far away it is. This should also help us catch anything weird going on with the data scaling. 
-The, try cranking up “EstimateLength” and “Distband”. EstimateLength will let the model run longer and so hopefully get near the data occasionally, Distband will widen what we mean by “near”. 
+
+Then, try cranking up “EstimateLength” and “Distband”. EstimateLength will let the model run longer and so hopefully get near the data occasionally, Distband will widen what we mean by “near”. 
 
