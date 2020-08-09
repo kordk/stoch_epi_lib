@@ -62,7 +62,10 @@ Usage of ./stoch_epi_lib.amd64.linux:
   -BurnIn int
         Burn in for equilibrium and likelihood estimations
   -DataScale string
-        How the transcript data is scaled relative to raw (Log2, Log, Log10, Linear, or none). Default none. Linear is treated as none, so model will be scaled the same way. Log scaled data is converted to unscaled for all calculation, returned equilibrium and trajectories are converted back to original scale. Parameter fitting is done to unscaled data. (default "none")
+        How the transcript data is scaled relative to raw (Log2, Log, Log10, Linear, or none). Default none. Linear 
+        is treated as none, so model will be scaled the same way. Log scaled data is converted to unscaled for all 
+        calculation, returned equilibrium and trajectories are converted back to original scale. Parameter fitting 
+        is done to unscaled data. (default "none")
   -DistBand float
         Bandwidth for equilibrium distriubtion or likelihood estimation (default 5)
   -DistResolution int
@@ -70,25 +73,30 @@ Usage of ./stoch_epi_lib.amd64.linux:
   -EqLength int
         Number of jumps in equilibrium distribution estimation. (default 1000)
   -EqWindow float
-        Radius of equilibrium distribution to compute in units of standard deviation (i.e. number of standard deviations above & below mean to compute distribution). (default 4)
+        Radius of equilibrium distribution to compute in units of standard deviation (i.e. number of standard 
+        deviations above & below mean to compute distribution). (default 4)
   -EstimateLength int
         Number of jumps in log-likelihood estimator realizations. (default 1000)
   -EvenRes float
         Resolution for process realizations between jumps. Set to 0 for no fill-in. (default 0.1)
   -JupPrint
-        Puts a newline at the end of each line of paramfit estimating likelihoods count, so that it runs with carriage return correctly in Jupyter for debugging.
+        Puts a newline at the end of each line of paramfit estimating likelihoods count, so that it runs with 
+        carriage return correctly in Jupyter for debugging.
   -LoadRands string
-        give an existing .json file name to the random parameters used in log-likelihood or parameter fitting calculation. (default "no")
+        give an existing .json file name to the random parameters used in log-likelihood or parameter fitting 
+        calculation. (default "no")
   -MissingSite float
         Value to use for missing epigenetic data (alpha value in model) in sample. (default 1e-10)
   -MissingTranscript float
         Value to use for missing transcript in sample.
   -NumberCores int
-        Extent to parallelize making quadratic in parameter fitting (number of go routines allowed). Defauts to not parallel, use -1 for max.
+        Extent to parallelize making quadratic in parameter fitting (number of go routines allowed). Defauts to not 
+        parallel, use -1 for max.
   -QuadPoints int
         Number of quadrature points for time averaging. (default 10)
   -SaveRands string
-        give a valid .json file name to the random parameters used in log-likelihood or parameter fitting calculation. (default "no")
+        give a valid .json file name to the random parameters used in log-likelihood or parameter fitting 
+        calculation. (default "no")
   -StoppingCondition int
         number of no-improvement steps before giving up (default 10)
   -datafl string
