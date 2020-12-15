@@ -1,4 +1,4 @@
-# stoch_epi_lib
+d# stoch_epi_lib
 stoch_epi_lib: An implementation of a dynamical systems method to estimate gene expression from epigenetic data and a gene regulatory network
 
 ## Demo
@@ -17,24 +17,24 @@ synapse get XXX
 mv syn22255244/* .
 </pre>
 
-There are four main steps to follow to generate the gene expression estimates. 
+There are four main steps to follow to generate the gene expression estimates.
 
-These steps can be performed on multiple shuffles of the data into training and testing sets to evaluate the performance of the model. 
+These steps can be performed on multiple shuffles of the data into training and testing sets to evaluate the performance of the model.
 
 ### 1) Data preparation
 
 #### Omics data
 
-Match gene expression and methylation state data are from the GTP Study (PMID 21536970). 
+Match gene expression and methylation state data are from the GTP Study (PMID 21536970).
 Transcription factor binding site to target (gene) data are from the MESA Study (PMID 29914364).
 
 | Filename | Description | Source |
 | :----- | :---------- | :---------- |
-| 29914364.MESA.eCpG.txt | Annotation files containing binding site to target (Phi) data from the expression-CpG pair predictions generated using the MESA study data. | https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-018-4842-3#Sec29 | 
+| 29914364.MESA.eCpG.txt | Annotation files containing binding site to target (Phi) data from the expression-CpG pair predictions generated using the MESA study data. | https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-018-4842-3#Sec29 |
 | GSE72680_beta_values.txt.gz | Methylation scores from the GTP Study | https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE72680 |
 
 Format the CpG annotation file from the downloaded manuscript data. This is already done for the demo.
- 
+
 <pre>
 cut -f1,3,4,7,10 12864_2018_4842_MOESM2_ESM.txt >29914364.MESA.eCpG.txt
 </pre>
@@ -50,16 +50,16 @@ annotation file format:
  assayName,chrom,position,gene,label
 
  where the columns are
-    assayName   [string] assay identifieer (e.g., cg00000029) 
+    assayName   [string] assay identifieer (e.g., cg00000029)
     chrom       [int] chrmosome
     position    [int] nucleotide position on the chromosome
     gene        [string] label of the associated gene (e.g., TRPV1A)
     label       [string] label with which the regions will be guided (e.g., Promoter)
 </pre>
 
-Many promoter regions contain multiple methylation loci and a method must be chosen to aggregate these into regions.  Merge the GTP methylation data into the MESA regions (Promoter) and create the Phi (binding site to target) data (MESA eCpG). 
+Many promoter regions contain multiple methylation loci and a method must be chosen to aggregate these into regions.  Merge the GTP methylation data into the MESA regions (Promoter) and create the Phi (binding site to target) data (MESA eCpG).
 
-Note: 
+Note:
 - The region (i.e., "Promoter") is hard-coded into the script but can be changed easily.
 - The current method to aggregate the epigenetic loci together and summarize is the average methylation score. This can be changed easily.
 
@@ -89,7 +89,7 @@ cat GSE72680/GSE72680_series_matrix.txt \
     | egrep "^\!Sample_description" \
     | egrep -v HumanMethylation450 \
     | sed 's/"//g' > GSE72680.mid2pid.txt
- 
+
 cat GSE72680_series_matrix.txt \
     | egrep "^\!Sample_title" \
     | sed 's/"//g' >> GSE72680.mid2pid.txt
@@ -120,7 +120,7 @@ unzip -p humanht-12_v3_0_r3_11283641_a_txt.zip \
 </pre>
 
 Merge the aggregated CpG regions and matching gene expression data by individual sample.
-- Merge the aggregated CpG regions and matching Gx V3.0 data 
+- Merge the aggregated CpG regions and matching Gx V3.0 data
 - log2 transform
 - filter with Illumina 0.05 detection p-value
 <pre>
@@ -131,9 +131,9 @@ usage: mergeMatchingData.py [hD2m:g:d:p:s:]
     -m gzip'd methylation data file
     -g gene expression data
     -d gene expression detection p-value cutoff
-    -p Probe ID to ENTREZ annotation file name 
+    -p Probe ID to ENTREZ annotation file name
     -s ENTREZ to Symbol annotation file name
-    
+
 gunzip regionAggregateData.csv
 
 mergeMatchingData.py \
@@ -150,7 +150,7 @@ mergeMatchingData.py \
 You can generate a simple HTML report of the JSON merged file.
 <pre>
 usage: profileJson.py [hD] -j <JSON file>
-     
+
 profileJson.py -j merged.ht12_v3.json
 </pre>
 
@@ -166,16 +166,16 @@ Epigenetic loci to gene mappings (phi).
 | de.symbols.txt | HUGO symbols of genes differentially expressed in GTP study | PMID 28925389 |
 | k.csv | Mapping of the TF to the target genes to build the GRN | N/A |
 
-Collect the TF to target map of the genes of interest and their TF. 
+Collect the TF to target map of the genes of interest and their TF.
 <pre>
 ## collect the DE genes for which we have data
 grep -w -f de.symbols.txt A_confidenceregs.csv >k.de.csv
- 
+
 ## collect other genes for which these TF are a target
 cut -d, -f1 k.de.csv  | sort | uniq >tf.txt
 cat tf.txt | awk '{print ","$1","}' > tf.q
 grep -f tf.q A_confidenceregs.csv > k.tgt.csv
- 
+
 ## merge into one list
 head -1 A_confidenceregs.csv >k.csv
 cat k.de.csv k.tgt.csv | sort | uniq >> k.csv
@@ -186,7 +186,7 @@ You can build the GRN using our tool. This is already done for the demo.
 gunzip regionAggregateInfo.tsv.gz
 
 python3 build_model.py \
-    k.csv demo/regionAggregateInfo.tsv 
+    k.csv demo/regionAggregateInfo.tsv
 </pre>
 
 Move these files (which describe the GRN) into a convenient location:
@@ -199,7 +199,7 @@ mv sites.json go_in_jsons/
 You can also build a datafile to import the network into Cytoscape:
 <pre>
 make_network_diagram_csv.py \
-    k.csv demo/regionAggregateInfo.tsv 
+    k.csv demo/regionAggregateInfo.tsv
 </pre>
 
 #### 2) Parameter fitting on training data
@@ -213,7 +213,7 @@ For our purposes, we split the data into training (80%) and testing (20%) datase
 splitArrayForTrainTest.py - create training and testing datasets from input array of merged transcript and alpha data
 
 usage: splitArrayForTrainTest.py [hD] -T -j <merged JSON file> -f <frequency of training data> ]
-     
+
 
 splitArrayForTrainTest.py  \
     -j merged.ht12_v3.json -f 0.80
@@ -247,7 +247,7 @@ stoch_epi_lib \
     >stoch_epi_lib.ParamFit.train.log 2>&1
 </pre>
 
-#### 3) Generate log likelihoods 
+#### 3) Generate log likelihoods
 
 | Filename | Description |
 | :----- | :---------- |
@@ -266,7 +266,7 @@ stoch_epi_lib \
     -sitefl="go_out_jsons/fitted_sites.json" \
     -genefl="go_out_jsons/fitted_genes.json" \
     >stoch_epi_lib.Log2.train.log 2>&1
-    
+
 grep Log stoch_epi_lib.Log2.train.log
 # Log-Likelihood of was 17170.16313, average simulation did not jump on 534.90769/1000 attempts, average simulation time length was 0.01697
 </pre>
@@ -288,7 +288,7 @@ stoch_epi_lib \
     -sitefl="go_out_jsons/fitted_sites.json" \
     -genefl="go_out_jsons/fitted_genes.json" \
     >stoch_epi_lib.Log2.test.log 2>&1
-    
+
 grep Log stoch_epi_lib.Log2.test.log
 # Log-Likelihood of was 4228.82033, average simulation did not jump on 500.27083/1000 attempts, average simulation time length was 0.01739
 </pre>
@@ -359,7 +359,7 @@ wc -l eqDistGxSummary.pickle.list
 cat << EOF > $ONE
 #!/bin/sh -x
 estGxFromEqDistPlotByGene.py -D -l eqDistGxSummary.pickle.list -p plots
-EOF 
+EOF
 
 chmod 755 $ONE
 ./$ONE >$ONE.log 2>&1
@@ -379,7 +379,7 @@ done
 estGxFromEqDistPlotByGeneJoinFolds.py -D -s \
      -l eqDistGxSummary.pickle.fold.list \
     >estGxFromEqDistPlotByGeneJoinFolds.small.py.log 2>&1
-    
+
 grep "Mean RSME" estGxFromEqDistPlotByGeneJoinFolds.small.py.log  | awk '{print $4, $10}' | column -t
 # AHR      2.505461
 # AK3      0.599878
@@ -388,4 +388,3 @@ grep "Mean RSME" estGxFromEqDistPlotByGeneJoinFolds.small.py.log  | awk '{print 
 # BAK1     4.511250
 # CCM2     1.201416
 </pre>
-

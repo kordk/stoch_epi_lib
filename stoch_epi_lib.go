@@ -19,7 +19,6 @@ import(
   "github.com/aclements/go-gg/generic/slice"
 )
 
-
 type Site struct{
   Lambda float64
   Lambdahat float64
