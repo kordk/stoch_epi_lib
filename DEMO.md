@@ -13,8 +13,9 @@ Copy all of the files into the same directory as the code from this repository a
 git clone https://github.com/kordk/stoch_epi_lib
 cd stoch_epi_lib
 go build stoch_epi_lib.go
-synapse get XXX
-mv syn22255244/* .
+synapse get -r syn22255244
+cd demo
+<!-- synapse get syn22287450 -->
 </pre>
 
 There are four main steps to follow to generate the gene expression estimates.
