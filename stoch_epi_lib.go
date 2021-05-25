@@ -19,6 +19,13 @@ import(
   "github.com/aclements/go-gg/generic/slice"
 )
 
+type GeneSummary struct{
+  RegulatedMean map[string]float64
+  RegulatedStd map[string]float64
+  InputMean map[string]float64
+  InputStd map[string]float64
+}
+
 type Site struct{
   Lambda float64
   Lambdahat float64
@@ -79,6 +86,23 @@ type ParHelp2 struct{
   Likeli float64
   Label string
 }
+
+type Regulation struct{
+  SiteID string
+  Regulators map[string]float64 //genes which bind to this site and what they do
+  Direction float64 //up regulation or down regulation (phival)
+  EquilibriumOn float64 //proportion of time it's on at equilibrium
+}
+
+type GeneControl struct{
+  GeneID string
+  RegulationSumFreq map[string]float64
+  RegulationMean float64
+  LocalEquilibriumFreq map[string]float64
+  LocalEquilibriumMean float64
+  RegulatorInfo map[string]Regulation
+}
+
 
 
 // HELPER FUNCTIONS TO MAKE COPIES.
@@ -181,13 +205,17 @@ func FileExists(filename string) bool {
 //The alpha-values of the matching data should be given with the initial guess of sites
 //This will try to optimize over Lambda,Lambdahat,Mu,Nu,Dil
 // used in main
-func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth float64, randoms [][]float64,ssteps int,stopnow int,numcrs int) ([]Site, []Gene, []float64) {
+func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth float64, randoms [][]float64,ssteps int,stopnow int,numcrs int) ([]Site, []Gene, []float64, GeneSummary) {
   fmt.Println("[MasterFit] Running.")
   //Which genes are going to behave "deterministically"?
   not_jumping := make([]int,0,len(genes))
   jumping_ones := make([]int,0,len(genes))
   mn_holder := make([]float64, len(match_data))
   all_means := make([]float64, len(genes))
+  regulated_mean := make(map[string]float64)
+  regulated_std := make(map[string]float64)
+  input_mean := make(map[string]float64)
+  input_std := make(map[string]float64)
   for i,gn := range genes{
     switch len(gn.Philoc){
     case 0:
@@ -197,6 +225,9 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
       meanof,_ := stats.Mean(mn_holder)
       all_means[i] = meanof
       not_jumping = append(not_jumping,i)
+      input_mean[gn.GeneID] = meanof
+      stdof,_ := stats.StdDevS(mn_holder)
+      input_std[gn.GeneID] = stdof
     default:
       for j,dp := range match_data{
         mn_holder[j] = dp.Transcript[gn.GeneID]
@@ -204,31 +235,37 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
       meanof,_ := stats.Mean(mn_holder)
       all_means[i] = meanof
       jumping_ones = append(jumping_ones,i)
+      regulated_mean[gn.GeneID] = meanof
+      stdof,_ := stats.StdDevS(mn_holder)
+      regulated_std[gn.GeneID] = stdof
     }
   }
+
+  DataSumm := GeneSummary{regulated_mean,regulated_std,input_mean,input_std}
+
 
   overall_mean,_ := stats.Mean(all_means)
   // overall_mean = overall_mean
 
-  for _,i := range not_jumping{
-    genes[i].Dil = genes[i].Dil*overall_mean
-    genes[i].Gamma = all_means[i]*genes[i].Dil
-  }
+  // for _,i := range not_jumping{
+  //   genes[i].Dil = genes[i].Gamma/all_means[i]
+  //   // genes[i].Gamma = all_means[i]*genes[i].Dil
+  // }
 
-  gammabounds := make([]float64,len(jumping_ones))
-
-  for l,i := range jumping_ones{
-    genes[i].Dil = genes[i].Dil*overall_mean
-    sm := 0.0
-    for _,v := range genes[i].Phival{
-      if v < 0{
-        sm = sm - v
-      }
-    }
-    gammabounds[l] = sm
-  }
-
-  // fmt.Println(gammabounds)
+  // gammabounds := make([]float64,len(jumping_ones))
+  //
+  // for l,i := range jumping_ones{
+  //   // genes[i].Dil = genes[i].Dil*overall_mean
+  //   sm := 0.0
+  //   for _,v := range genes[i].Phival{
+  //     if v < 0{
+  //       sm = sm - v
+  //     }
+  //   }
+  //   gammabounds[l] = sm
+  // }
+  //
+  // // fmt.Println(gammabounds)
 
   fmt.Printf("[MasterFit] Fitting on %d/%d stochastic genes\n",len(jumping_ones),len(genes))
   //Now we have initialized on the surface with gn.Gamma/gn.Dil = mean(data[gn.GeneID]) for each of those.
@@ -239,23 +276,23 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
   num_nogood := 0
   fmt.Printf("[MasterFit] Computing initial likelihood.\n")
 
-  first_like,numno,_ := TotalLike(sites,genes,match_data,randoms,bwidth,jumping_ones,overall_mean)
-  fmt.Printf("[MasterFit] Initial likelihood: %0.5f\n No jump on %0.5f/%d draws.\n",first_like,numno,len(randoms[0]))
+  first_like,numno,endtime,totalDist := TotalLike(sites,genes,match_data,randoms,bwidth,jumping_ones,overall_mean)
+  fmt.Printf("[MasterFit] Initial likelihood: %0.5f\n No jump on %0.5f/%d draws.\n Simulated to Time %0.5f\n Mean distance from data to realization was %0.5f\n",first_like,numno,len(randoms[0]),endtime,totalDist)
   likaswego := []float64{first_like}
 
   desc_tol := -6
 
   fmt.Println("[MasterFit] Generating sample parameter sets.")
-  fmt.Println("[MasterFit] Stopping condition is %d steps in a row with descrease of less than 10^%d %",stopnow,desc_tol)
+  fmt.Printf("[MasterFit] Stopping condition is %d steps in a row with descrease of less than 10^%d\n",stopnow,desc_tol)
 
-  mxstpszi := 0.2
+  mxstpszi := 0.1
   stpsize := 0.01
   for k:=0; (k<ssteps) && keepgoing; k++{
     fmt.Printf("[MasterFit] %d/%d Running. %s\n",k,ssteps, time.Now().Format("2006.01.02 15:04:05"))
 
 
     //we can do a data subset...that's the essence of ``stochastic" grad descent.
-    subsize := 50
+    subsize := int(float64(len(match_data))*0.33)
     var data_subset []MatchingData
     if len(match_data)<subsize{
       data_subset = match_data
@@ -268,8 +305,17 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
       }
     }
 
-    //do the grad descent
-    new_sites,new_genes,gl2 := StochGradDescent(sites, genes, data_subset, d ,bwidth, randoms,stpsize,jumping_ones,overall_mean,numcrs)//gradient descent step needs to return parameters after 1 step
+    var new_sites []Site
+    var new_genes []Gene
+    var gl2 float64
+
+    if math.Mod(float64(k),10.0) == 0 && k>1{
+      fmt.Println("[MasterFit] Trying random jump")
+      new_sites,new_genes,gl2 = StochGradDescent(sites, genes, data_subset, d ,bwidth, randoms,stpsize,jumping_ones,overall_mean,numcrs,true)
+    }else{
+      new_sites,new_genes,gl2 = StochGradDescent(sites, genes, data_subset, d ,bwidth, randoms,stpsize,jumping_ones,overall_mean,numcrs,false)//gradient descent step needs to return parameters after 1 step
+    }
+
     if math.IsNaN(gl2){
       fmt.Println("[MasterFit] l2 norm of Gradient is now NaN, Stopping.")
       break
@@ -278,9 +324,9 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
     fmt.Printf("[MasterFit] found new parameters.\n")
 
     //compute the likelihood
-    new_like,_,_ := TotalLike(new_sites,new_genes,match_data,randoms,bwidth,jumping_ones,overall_mean)//get the new likelihood
+    new_like,numno,endtime,totalDist := TotalLike(new_sites,new_genes,match_data,randoms,bwidth,jumping_ones,overall_mean)//get the new likelihood
 
-    fmt.Printf("[MasterFit] New likelihood %5f.\n", new_like)
+    fmt.Printf("[MasterFit] New likelihood %5f (previous %5f).\n No jump on %0.5f/%d draws.\n Simulated to Time %0.5f\n Mean distance from data to realization was %0.5f\n",new_like,likaswego[len(likaswego)-1],numno,len(randoms[0]),endtime,totalDist)
 
 
     if math.IsNaN(new_like){
@@ -302,7 +348,8 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
 
     }else{
       num_nogood += 1
-      stpsize = stpsize*0.7
+      stpsize = stpsize*0.9
+      fmt.Printf("No improvement, reducing step size to %0.5f.\n",stpsize)
     }
 
     //quit if you haven't improved in 100 steps or whatever
@@ -311,6 +358,7 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
       fmt.Printf("[MasterFit] No improvement in %d steps, stopping", num_nogood)
     }
     if k+1 == ssteps{
+      keepgoing = false
       fmt.Printf("[MasterFit] Reached maximum allowed steps of %d",ssteps)
     }
 
@@ -322,12 +370,12 @@ func MasterFit(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth 
 
   // fmt.Println(likaswego)
   fmt.Printf("[MasterFit] Completed. %s\n",time.Now().Format("2006.01.02 15:04:05"))
-  return sites,genes,likaswego
+  return sites,genes,likaswego,DataSumm
 }
 
 // Stochastic gradient descent of likelihood function of parameters.
 // used in MasterFit
-func StochGradDescent(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth float64, randoms [][]float64,tstep float64,includedlist []int,rescalefactor float64,numcrs int) ([]Site,[]Gene, float64){
+func StochGradDescent(sites []Site, genes []Gene, match_data []MatchingData, d ,bwidth float64, randoms [][]float64,tstep float64,includedlist []int,rescalefactor float64,numcrs int,farstep bool) ([]Site,[]Gene, float64){
 
   tmpsites := CopySites(sites)//make([]Site, 0)
   tmpgenes := CopyGenes(genes)//make([]Gene, 0)
@@ -344,7 +392,7 @@ func StochGradDescent(sites []Site, genes []Gene, match_data []MatchingData, d ,
     }
   }
 
-  topN := 100
+  topN := 10
 
   gradStDp := make(map[string][]Site, len(match_data))
   gradGnDp := make(map[string][]Gene, len(match_data))
@@ -399,18 +447,36 @@ func StochGradDescent(sites []Site, genes []Gene, match_data []MatchingData, d ,
 
   Gradl2 := math.Sqrt(lngt)
 
-  for j,si := range tmpsites{
+  if farstep{
+    for j,si := range tmpsites{
 
-    tmpsites[j].Lambda = math.Max(si.Lambda + tstep*gradVecSites[j].Lambda/Gradl2,0)
-    tmpsites[j].Lambdahat = math.Max(si.Lambdahat + tstep*gradVecSites[j].Lambdahat/Gradl2,0)
-    tmpsites[j].Mu = math.Max(si.Mu + tstep*gradVecSites[j].Mu/Gradl2,0)
-    tmpsites[j].Nu = si.Nu + tstep*gradVecSites[j].Nu/Gradl2
+      tmpsites[j].Lambda = math.Max(si.Lambda + 10*rand.Float64(),0)
+      tmpsites[j].Lambdahat = math.Max(si.Lambdahat + 10*rand.Float64(),0)
+      tmpsites[j].Mu = math.Max(si.Mu + 10*rand.Float64(),0)
+      tmpsites[j].Nu = si.Nu + 10*rand.Float64()
+    }
+
+
+    // for j,gn := range tmpgenes{
+    for _,j := range includedlist{
+      tmpgenes[j].Dil = math.Max(tmpgenes[j].Dil + 10*rand.Float64(),0)
+    }
+  }else{
+    for j,si := range tmpsites{
+
+      tmpsites[j].Lambda = math.Max(si.Lambda + tstep*gradVecSites[j].Lambda/Gradl2,0)
+      tmpsites[j].Lambdahat = math.Max(si.Lambdahat + tstep*gradVecSites[j].Lambdahat/Gradl2,0)
+      tmpsites[j].Mu = math.Max(si.Mu + tstep*gradVecSites[j].Mu/Gradl2,0)
+      tmpsites[j].Nu = si.Nu + tstep*gradVecSites[j].Nu/Gradl2
+    }
+
+
+    // for j,gn := range tmpgenes{
+    for _,j := range includedlist{
+      tmpgenes[j].Dil = math.Max(tmpgenes[j].Dil + tstep*gradVecGns[j].Dil/Gradl2,0)
+    }
   }
 
-
-  for j,gn := range tmpgenes{
-    tmpgenes[j].Dil = math.Max(gn.Dil + tstep*gradVecGns[j].Dil/Gradl2,0)
-  }
 
   return tmpsites,tmpgenes,Gradl2
 
@@ -503,11 +569,17 @@ func GradDescentDp(sites []Site, genes []Gene, tmpsites []Site, tmpgenes []Gene,
 
   gradSt := make([]Site,len(tmpsites))
   gradGn := make([]Gene,len(tmpgenes))
-  for j,si := range tmpsites{
-    gradSt[j].Lambda = ComputeDerivSite(1, j,stateCounts, si,StateLikelihoods,transc_val)
-    gradSt[j].Lambdahat = ComputeDerivSite(2, j,stateCounts, si,StateLikelihoods,transc_val)
-    gradSt[j].Mu = ComputeDerivSite(3, j,stateCounts, si,StateLikelihoods,transc_val)
-    gradSt[j].Nu = ComputeDerivSite(4, j,stateCounts, si,StateLikelihoods,transc_val)
+
+  sumdil := 0.0
+  for _,gn := range tmpgenes{
+    sumdil += gn.Dil
+  }
+
+  for j,_ := range tmpsites{
+    gradSt[j].Lambda = ComputeDerivSite(1, j,stateCounts, tmpsites,StateLikelihoods,transc_val,sumdil)
+    gradSt[j].Lambdahat = ComputeDerivSite(2, j,stateCounts, tmpsites,StateLikelihoods,transc_val,sumdil)
+    gradSt[j].Mu = ComputeDerivSite(3, j,stateCounts, tmpsites,StateLikelihoods,transc_val,sumdil)
+    gradSt[j].Nu = ComputeDerivSite(4, j,stateCounts, tmpsites,StateLikelihoods,transc_val,sumdil)
   }
   for j,gn := range tmpgenes{
     gradGn[j].Dil = ComputeDerivGene(j,stateCounts,gn,dp.Transcript[gn.GeneID])
@@ -546,229 +618,153 @@ func ComputeDerivGene(paramindex int, topStates []StateCount, gene Gene, transcr
 
 // Compute derivative for a site parameter.
 // used in GradDescentDp
-func ComputeDerivSite(paramtype int, paramindex int,topStates []StateCount, site Site,all_partlikes []StateLikes, transcriptval []float64) float64 {
+func ComputeDerivSite(paramtype int, paramindex int,topStates []StateCount, sites []Site,all_partlikes []StateLikes, transcriptval []float64,sumdil float64) float64 {
   //paramtypes are 1:Lambda, 2:Lambdahat, 3:Mu, 4:Nu
   // rhs := make([]float64,topN)
+
+  // fmt.Println("Computing derivative")
 
   topStatesSli := make([][]float64,len(topStates))
   for k,tS := range topStates{
     topStatesSli[k] = tS.State
   }
 
-  sumDeriv := 0.0
-  doneAlready := make([]int,0,len(topStates))
+  // doneAlready := make([]int,0,len(topStates))
 
-  gdotKap := 0.0
-  for kvind,siind := range site.Kaploc{
-    gdotKap += math.Max(transcriptval[siind],0.01)*site.Kapval[kvind]//we can actually use any value of g...as long as it isn't 0!
+  // gdotKap := 0.0
+  // for kvind,siind := range site.Kaploc{
+  //   gdotKap += math.Max(transcriptval[siind],0.01)*site.Kapval[kvind]//we can actually use any value of g...as long as it isn't 0!
+  // }
+
+  bigSys := mat.NewDense(len(topStates),len(topStates),nil)
+
+  for j,B := range topStatesSli{
+    row := make([]float64,len(topStates))
+    diagTerm := -sumdil
+    for k,bik := range B{
+      paramcombo := sites[k].Lambda*sites[k].Mu/(sites[k].Mu + math.Pow(sites[k].Alpha,sites[k].Nu))
+      offb1 := GetOffByOne(B,topStatesSli, k)//index of j Delta k
+      gdotKap := 0.0
+      for kvind,siind := range sites[k].Kaploc{
+        gdotKap += math.Max(transcriptval[siind],0.01)*sites[k].Kapval[kvind]
+      }
+      diagTerm += (1-bik)*paramcombo*gdotKap + sites[k].Lambdahat*bik
+      if offb1 != -1{
+        iDkTerm := -(gdotKap*bik*(1-topStatesSli[offb1][k])*paramcombo + sites[k].Lambdahat*topStatesSli[offb1][k]*(1-bik))
+        row[offb1] = iDkTerm
+      }
+    }
+    row[j] = diagTerm
+    bigSys.SetRow(j,row)
   }
+  bigRHS := mat.NewVecDense(len(topStates),nil)
 
-
-
-
-
-  paramcomboFull := site.Lambda*gdotKap*site.Mu/(site.Mu + math.Pow(site.Alpha,site.Nu))
-
+  m := paramindex
   switch paramtype{
   case 1://lambda
-    paramcombo := gdotKap*site.Mu/(site.Mu + math.Pow(site.Alpha,site.Nu))
     for j,B := range topStatesSli{
 
-      if NotIn(j,doneAlready){
-
-        offb1 := GetOffByOne(B,topStatesSli, paramindex)//index of j Delta m
-
-        if offb1 != -1{
-          Bd := topStatesSli[offb1]
-
-          // 2x2 system is
-          // [A1 B1] [dl1dth] = [C1]
-          // [A2 B2] [dldth]    [C2]
-
-          C1 := paramcombo*B[paramindex]*(1-Bd[paramindex])*all_partlikes[offb1].Li - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-          C2 := paramcombo*Bd[paramindex]*(1-B[paramindex])*all_partlikes[j].Li - paramcombo*(1-Bd[paramindex])*all_partlikes[offb1].Li
-
-          A1 := -(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]
-          A2 := -(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]
-
-          B1 := B[paramindex]*(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]*(1-B[paramindex])
-          B2 := Bd[paramindex]*(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]*(1-Bd[paramindex])
-
-
-
-          sumDeriv += (1/(A1*B2 - A2*B1))*(B2*C1 - B1*C2 -A2*C1 + A1*C2)
-
-          doneAlready = append(doneAlready,j)
-          doneAlready = append(doneAlready,offb1)
-
-        }else{
-
-          C1 := - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-
-          A1 := -(1-B[paramindex])*site.Lambda*paramcombo + site.Lambdahat*B[paramindex]
-
-          sumDeriv += C1/A1
-
-          doneAlready = append(doneAlready,j)
-
-
-
+      offb1_m := GetOffByOne(B,topStatesSli,paramindex)
+      if offb1_m != -1{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
         }
+        paramcombo := sites[m].Mu/(sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu))
+        rhsTerm1 :=(B[m]*(1-topStatesSli[offb1_m][m])*paramcombo*gdotKap)*all_partlikes[offb1_m].Li
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm1 + rhsTerm2)
+      }else{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
+        }
+        paramcombo := sites[m].Mu/(sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu))
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j, rhsTerm2)
       }
     }
+
+
   case 2://lambdahat
-
     for j,B := range topStatesSli{
 
-      if NotIn(j,doneAlready){
-
-        offb1 := GetOffByOne(B,topStatesSli, paramindex)//index of j Delta m
-
-        if offb1 != -1{
-          Bd := topStatesSli[offb1]
-
-          // 2x2 system is
-          // [A1 B1] [dl1dth] = [C1]
-          // [A2 B2] [dldth]    [C2]
-
-          C1 := Bd[paramindex]*(1-B[paramindex])*all_partlikes[offb1].Li - B[paramindex]*all_partlikes[j].Li
-          C2 := B[paramindex]*(1-Bd[paramindex])*all_partlikes[j].Li - Bd[paramindex]*all_partlikes[offb1].Li
-
-          A1 := -(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]
-          A2 := -(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]
-
-          B1 := B[paramindex]*(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]*(1-B[paramindex])
-          B2 := Bd[paramindex]*(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]*(1-Bd[paramindex])
-
-
-
-          sumDeriv += (1/(A1*B2 - A2*B1))*(B2*C1 - B1*C2 -A2*C1 + A1*C2)
-
-          doneAlready = append(doneAlready,j)
-          doneAlready = append(doneAlready,offb1)
-
-        }else{
-
-          C1 := -  B[paramindex]*all_partlikes[j].Li
-
-          A1 := -(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]
-
-          sumDeriv += C1/A1
-
-          doneAlready = append(doneAlready,j)
-
-
-
-        }
+      offb1_m := GetOffByOne(B,topStatesSli,paramindex)
+      if offb1_m != -1{
+        rhsTerm1 :=(topStatesSli[offb1_m][m]*(1-B[m]))*all_partlikes[offb1_m].Li
+        rhsTerm2 := (B[m])*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm1 + rhsTerm2)
+      }else{
+        rhsTerm2 := (B[m])*all_partlikes[j].Li
+        bigRHS.SetVec(j, rhsTerm2)
       }
     }
-
 
   case 3://mu
-    paramcombo := gdotKap*(math.Pow(site.Alpha,site.Nu))/(site.Mu + math.Pow(site.Alpha,site.Nu))
-
-
     for j,B := range topStatesSli{
 
-      if NotIn(j,doneAlready){
-
-        offb1 := GetOffByOne(B,topStatesSli, paramindex)//index of j Delta m
-
-        if offb1 != -1{
-          Bd := topStatesSli[offb1]
-
-          // 2x2 system is
-          // [A1 B1] [dl1dth] = [C1]
-          // [A2 B2] [dldth]    [C2]
-
-          C1 := paramcombo*B[paramindex]*(1-Bd[paramindex])*all_partlikes[offb1].Li - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-          C2 := paramcombo*Bd[paramindex]*(1-B[paramindex])*all_partlikes[j].Li - paramcombo*(1-Bd[paramindex])*all_partlikes[offb1].Li
-
-          A1 := -(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]
-          A2 := -(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]
-
-          B1 := B[paramindex]*(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]*(1-B[paramindex])
-          B2 := Bd[paramindex]*(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]*(1-Bd[paramindex])
-
-
-
-          sumDeriv += (1/(A1*B2 - A2*B1))*(B2*C1 - B1*C2 -A2*C1 + A1*C2)
-
-          doneAlready = append(doneAlready,j)
-          doneAlready = append(doneAlready,offb1)
-
-        }else{
-
-          C1 := - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-
-          A1 := -(1-B[paramindex])*site.Lambda*paramcombo + site.Lambdahat*B[paramindex]
-
-          sumDeriv += C1/A1
-
-          doneAlready = append(doneAlready,j)
-
-
-
+      offb1_m := GetOffByOne(B,topStatesSli,paramindex)
+      if offb1_m != -1{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
         }
+        paramcombo := math.Pow(sites[m].Alpha,sites[m].Nu)/math.Pow((sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu)),2)
+        rhsTerm1 :=(B[m]*(1-topStatesSli[offb1_m][m])*paramcombo*gdotKap)*all_partlikes[offb1_m].Li
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm1 + rhsTerm2)
+      }else{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
+        }
+        paramcombo := math.Pow(sites[m].Alpha,sites[m].Nu)/math.Pow((sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu)),2)
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm2)
       }
     }
-
-
-
-  case 4:
-
-    sAlpha := math.Max(0.001,site.Alpha)
-
-    paramcombo := -gdotKap*(site.Mu*math.Pow(sAlpha,site.Nu)*math.Log(sAlpha))/(math.Pow(site.Mu + math.Pow(sAlpha,site.Nu),2))
-
-
-
+  case 4://nu
     for j,B := range topStatesSli{
 
-      if NotIn(j,doneAlready){
-
-        offb1 := GetOffByOne(B,topStatesSli, paramindex)//index of j Delta m
-
-        if offb1 != -1{
-          Bd := topStatesSli[offb1]
-
-          // 2x2 system is
-          // [A1 B1] [dl1dth] = [C1]
-          // [A2 B2] [dldth]    [C2]
-
-          C1 := paramcombo*B[paramindex]*(1-Bd[paramindex])*all_partlikes[offb1].Li - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-          C2 := paramcombo*Bd[paramindex]*(1-B[paramindex])*all_partlikes[j].Li - paramcombo*(1-Bd[paramindex])*all_partlikes[offb1].Li
-
-          A1 := -(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]
-          A2 := -(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]
-
-          B1 := B[paramindex]*(1-Bd[paramindex])*paramcomboFull + site.Lambdahat*Bd[paramindex]*(1-B[paramindex])
-          B2 := Bd[paramindex]*(1-B[paramindex])*paramcomboFull + site.Lambdahat*B[paramindex]*(1-Bd[paramindex])
-
-
-
-          sumDeriv += (1/(A1*B2 - A2*B1))*(B2*C1 - B1*C2 -A2*C1 + A1*C2)
-
-          doneAlready = append(doneAlready,j)
-          doneAlready = append(doneAlready,offb1)
-
-        }else{
-
-          C1 := - paramcombo*(1-B[paramindex])*all_partlikes[j].Li
-
-          A1 := -(1-B[paramindex])*site.Lambda*paramcombo + site.Lambdahat*B[paramindex]
-
-          sumDeriv += C1/A1
-
-          doneAlready = append(doneAlready,j)
-
-
-
+      offb1_m := GetOffByOne(B,topStatesSli,paramindex)
+      if offb1_m != -1{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
         }
+
+        paramcombo := sites[m].Mu*math.Pow(sites[m].Alpha,sites[m].Nu)*math.Log(sites[m].Alpha)/math.Pow(sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu),2)
+
+        rhsTerm1 :=(B[m]*(1-topStatesSli[offb1_m][m])*paramcombo*gdotKap)*all_partlikes[offb1_m].Li
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm1 + rhsTerm2)
+      }else{
+        gdotKap := 0.0
+        for kvind,siind := range sites[m].Kaploc{
+          gdotKap += math.Max(transcriptval[siind],0.01)*sites[m].Kapval[kvind]
+        }
+
+        paramcombo := sites[m].Mu*math.Pow(sites[m].Alpha,sites[m].Nu)*math.Log(sites[m].Alpha)/math.Pow(sites[m].Mu + math.Pow(sites[m].Alpha,sites[m].Nu),2)
+
+        rhsTerm2 := ((1-B[m])*paramcombo*gdotKap)*all_partlikes[j].Li
+        bigRHS.SetVec(j,rhsTerm2)
       }
     }
 
   }
+
+  // fmt.Println("Solving Big System")
+
+  var slnvec mat.VecDense
+  slnvec.SolveVec(bigSys,bigRHS)
+
+  // fmt.Println("Summing")
+
+  sumDeriv := 0.0
+  for i := 0;i<slnvec.Len();i++{
+    sumDeriv +=  slnvec.AtVec(i)
+  }
+
   return sumDeriv
 
 }
@@ -969,8 +965,9 @@ func NotIn(a int, B []int) bool{
 
 // Get Likelihood of data according to a realization
 // Used in MasterFit, main
-func TotalLike(sites []Site, genes []Gene, data_points []MatchingData, randoms [][]float64,bndwthsiz float64,includedlist []int,rescalefactor float64) (float64,float64,float64){
+func TotalLike(sites []Site, genes []Gene, data_points []MatchingData, randoms [][]float64,bndwthsiz float64,includedlist []int,rescalefactor float64) (float64,float64,float64,float64){
   all_likes := make([]float64,len(data_points))
+  all_dists := make([]float64,len(data_points))
   tmpsites := CopySites(sites)//make([]Site, 0)
 
   //copier.Copy(&tmpsites,&sites)
@@ -993,7 +990,7 @@ func TotalLike(sites []Site, genes []Gene, data_points []MatchingData, randoms [
       tmpsites[j].Alpha = dp.Alpha[tmpsites[j].Aid]
     }
     // fmt.Printf("\r[TotalLike] Estimating likelihood of point %d/%d",i,len(data_points))
-    all_likes[i],numno[i],totimes[i] = EstLogLikelihood(tmpsites,tmpgenes,dp.Transcript, randoms,bndwthsiz,1,bndwthmat,includedlist,rescalefactor)
+    all_likes[i],numno[i],totimes[i],all_dists[i] = EstLogLikelihood(tmpsites,tmpgenes,dp.Transcript, randoms,bndwthsiz,1,bndwthmat,includedlist,rescalefactor)
   }
   loglikelihood := 0.0
   for _,lh := range all_likes{
@@ -1001,23 +998,29 @@ func TotalLike(sites []Site, genes []Gene, data_points []MatchingData, randoms [
   }
   meanno,_ := stats.Mean(numno)
   //if that didn't work correctly, use jumper2 instead.
-  if meanno/float64(len(randoms[0])) > 0.75{
+  if meanno/float64(len(randoms[0])) > 0.50{
     for i,dp := range data_points{
       for j := 0; j< len(tmpsites); j++{
         tmpsites[j].Alpha = dp.Alpha[tmpsites[j].Aid]
       }
       // fmt.Printf("\r[TotalLike] Estimating likelihood of point %d/%d",i,len(data_points))
-      all_likes[i],numno[i],totimes[i] = EstLogLikelihood(tmpsites,tmpgenes,dp.Transcript, randoms,bndwthsiz,2,bndwthmat,includedlist,rescalefactor)
+      all_likes[i],numno[i],totimes[i],all_dists[i] = EstLogLikelihood(tmpsites,tmpgenes,dp.Transcript, randoms,bndwthsiz,2,bndwthmat,includedlist,rescalefactor)
     }
   }
+  loglikelihood = 0.0
+  for _,lh := range all_likes{
+    loglikelihood += lh
+  }
+  meanno,_ = stats.Mean(numno)
   meantim,_ := stats.Mean(totimes)
-  return loglikelihood, meanno, meantim
+  meanDi,_ := stats.Mean(all_dists)
+  return loglikelihood, meanno, meantim, meanDi
 }
 
 //Estimate the (negative) log-likelihood of a single transctipt data point given a parameter set (including alphas)
 // uses time averaging, and predrawn random numbers.
 // Used in TotalLike
-func EstLogLikelihood(sites []Site, genes []Gene,transcript map[string]float64, randoms [][]float64,bndwthsiz float64, whichj int, bndwthmat []float64, includedlist []int,rescalefactor float64) (float64, float64, float64) {
+func EstLogLikelihood(sites []Site, genes []Gene,transcript map[string]float64, randoms [][]float64,bndwthsiz float64, whichj int, bndwthmat []float64, includedlist []int,rescalefactor float64) (float64, float64, float64, float64) {
   //Need to get our realization into equilibrium
   //first need some initial conditions
   qdpts := 3
@@ -1040,25 +1043,21 @@ func EstLogLikelihood(sites []Site, genes []Gene,transcript map[string]float64, 
   }
   // copy(transc_vals,ginit)
   //then get a sampler going.
-  path,numnoj := Jumper_use(binit,ginit,0,sites,genes,randoms,"none")
-  if whichj != 1{
+  var path Realization
+  var numnoj int
+  switch whichj {
+  case 1:
+    path,numnoj = Jumper_use(binit,ginit,0,sites,genes,randoms,"none")
+  case 2:
     path,numnoj = Jumper2_use(binit,ginit,0,sites,genes,randoms,"none")
+  default:
+    panic("No jumper chosen - please choose 1 or 2")
   }
-  // bndwthsiz := 2.0
-  //bandwidth matrix should have det(A) = 1.
 
-
-  // for i,j := range includedlist{
-  //   pathg := make([]float64,len(path.T))
-  //   for k :=0; k<len(path.T)-1; k++{
-  //     pathg[k] = path.G[k][j]
-  //   }
-  //   pathavg,_ := stats.Mean(pathg)
-  //   fmt.Println(transc_vals[i],pathavg,genes[j].GeneID)
-  // }
 
 
   estim := 0.0
+  distestim := 0.0
 
   totalT := path.T[len(path.T)-1] - path.T[1]
   all_dils := make([]float64, len(includedlist))
@@ -1079,22 +1078,50 @@ func EstLogLikelihood(sites []Site, genes []Gene,transcript map[string]float64, 
       all_siks[i] = path.SG[j][sj]
     }
     eval := GaussKernal(all_dils,all_giks,all_siks,transc_vals,bndwthmat,bndwthsiz)
+    dist_check := RawDistance(all_dils,all_giks,all_siks,transc_vals,bndwthmat)
     switch{
     case Dtk > 0:
       estim += quad.Fixed(eval, 0, Dtk, qdpts, nil, 0)
+      distestim += quad.Fixed(dist_check, 0, Dtk, qdpts, nil, 0)
     case Dtk == 0:
       estim += 0
+      distestim += 0
     case Dtk<0:
       panic("Time is moving backwards!!!")
     }
   }
   loglikest = math.Log(estim/float64(totalT))
-  return -loglikest,float64(numnoj),float64(totalT)/rescalefactor
+  return -loglikest,float64(numnoj),float64(totalT)/rescalefactor,distestim
 }
 
 // Gaussian Kernal for kernal density estimate of likelihood
 // Used in EstLogLikelihood, GetLiState
 func GaussKernal(dis, giks, siks, data_point []float64,Aflat []float64, h float64) func(float64) float64{
+  var kh float64
+  return func(t float64) float64{
+    model_samp := make([]float64,len(data_point))
+    for i,_ := range model_samp{
+      model_samp[i] = math.Exp(-dis[i]*t)*(giks[i]-siks[i]) + siks[i]
+    }
+    d := len(data_point)
+    // fmt.Printf("d=%d, and Aflat len is %d\n",d,len(Aflat))
+    Hmat := mat.NewDense(d,d,Aflat)
+    msmat := mat.NewVecDense(d,model_samp)
+    dpmat := mat.NewVecDense(d,data_point)
+
+    xmy := mat.NewVecDense(d, nil)
+
+    xmy.SubVec(msmat,dpmat)
+    xmy.ScaleVec(1/h,xmy)
+
+    kh = math.Exp(-0.5*mat.Inner(xmy,Hmat,xmy)) //(1.0/math.Pow(2.0*math.Pi*h,float64(d)/2.0))*
+    return kh
+  }
+}
+
+// Get raw distance from data (WRT distance used for Gaussian Kernal) to help choose bandwidth of kernal
+// Used in EstLogLikelihood, GetLiState
+func RawDistance(dis, giks, siks, data_point []float64,Aflat []float64) func(float64) float64{
   var kh float64
   return func(t float64) float64{
     model_samp := make([]float64,len(data_point))
@@ -1113,14 +1140,12 @@ func GaussKernal(dis, giks, siks, data_point []float64,Aflat []float64, h float6
     // Hxmy := mat.NewVecDense(d, actual2)
 
     xmy.SubVec(msmat,dpmat)
-    xmy.ScaleVec(1/h,xmy)
 
     // Hxmy.MulVec(Hmat,xmy)
-    kh = (1.0/(math.Pow(2.0*math.Pi,float64(d)/2.0)*math.Pow(h,float64(d))))*math.Exp(-0.5*mat.Inner(xmy,Hmat,xmy))
+    kh = mat.Inner(xmy,Hmat,xmy)
     return kh
   }
 }
-
 
 
 // FUNCTIONS TO GENERATE A REALIZATION
@@ -1580,7 +1605,7 @@ func Jumper2_use(b0, g0 []float64, t0 float64,sites []Site, genes []Gene, ran_nu
     // fmt.Println("rv:",uu)
     for l := 1.0;l<8;l++{
       dt := math.Pow(10,-l)
-      // fmt.Printf("Jumper2_use: random number is %0.5f\n",uu)
+      // fmt.Printf("Stopper is at %0.4f, needs to reach %0.4f\n",stopper(jumptime),uu)
       for stopper(jumptime) < uu{
         // fmt.Printf("Jumper2_use: transform is %0.5f\n",stopper(jumptime))
         // fmt.Printf("Stopper is at %0.4f, needs to reach %0.4f\n",stopper(jumptime),uu)
@@ -1953,6 +1978,7 @@ func GetEquilibriumTimeAvg(sites []Site, genes []Gene, npts, qdpts ,N int,h floa
   return the_margs
 }
 
+
 // Compute Transpose of a slice of floats.
 // used in GetEquilibriumTimeAvg
 func Transpose(slice [][]float64) [][]float64 {
@@ -1971,6 +1997,155 @@ func Transpose(slice [][]float64) [][]float64 {
 }
 
 //
+// Gets regulatory switch info for each gene - tell us how on/off a gene is as well as more detailed the regulatory info.
+// Used in main
+func GetEquilibriumOnOff(sites []Site, genes []Gene, N int, bt int, datascl string) map[string]GeneControl{
+  //Start the realization
+  b0 := make([]float64,len(sites))
+  g0 := make([]float64,len(genes))
+  //with random initial sites active
+  for i,_ := range(b0){
+    b0[i] = float64(rand.Intn(2))
+  }
+  //and initial gene active based on those.
+  jumping_ones := make([]int,0,len(genes))
+  for i,gn := range(genes){
+    if len(gn.Philoc) > 0{
+      jumping_ones = append(jumping_ones,i)
+      g0[i] = gn.Gamma/gn.Dil
+    }else{
+      g0[i] =(1 + gn.Gamma)/gn.Dil
+    }
+  }
+
+  //we can burn in if we really want to.
+  if bt>0{
+
+    burnrandexps := make([]float64,bt)
+    burnrandunifs := make([]float64,bt)
+
+    for i := 0; i<bt; i++{
+      burnrandexps[i] = rand.ExpFloat64()
+      burnrandunifs[i] = rand.Float64()
+    }
+    burnrandoms := [][]float64{burnrandexps,burnrandunifs}
+
+    burnpath,_ := Jumper_use(b0, g0, 0, sites, genes, burnrandoms,"none")
+    copy(b0,burnpath.B[len(burnpath.B)-1])
+    copy(g0,burnpath.G[len(burnpath.G)-1])
+  }
+
+  randexps := make([]float64,N)
+  randunifs := make([]float64,N)
+
+
+  for i := 0; i<N; i++{
+    randexps[i] = rand.ExpFloat64()
+    randunifs[i] = rand.Float64()
+  }
+  //these are the random numbers used in the realization. Pre-generating allows for bug-testing.
+  randoms := [][]float64{randexps,randunifs}
+
+
+  path,noj := Jumper_use(b0, g0, 0, sites, genes, randoms,"none")
+  if float64(noj) > float64(N)*0.75{
+    path,noj = Jumper2_use(b0, g0, 0, sites, genes, randoms,"none")
+  }
+
+  totalT := path.T[len(path.T)-1] - path.T[1]
+
+
+
+  fmt.Printf("Total Realization time for estimation was %0.5f\n",totalT)
+
+  SGtran := Transpose(path.SG)
+  Btran := Transpose(path.B)
+  TheReg := make(map[string]GeneControl,len(jumping_ones))
+  // for i,gn := range path.GeneIDs{
+  for _,i := range jumping_ones{
+
+    reg := GeneControl{}
+    reg.GeneID = path.GeneIDs[i]
+
+    SGcounts := make(map[string]float64)
+    SGtot  := 0.0
+
+    switch datascl {
+    case "Log2":
+      for _,sgval := range SGtran[i]{
+        SGcounts[fmt.Sprintf("%f",math.Log2(sgval))] += 1.0/float64(len(path.T))
+        SGtot += sgval
+      }
+      reg.LocalEquilibriumFreq = SGcounts
+      reg.LocalEquilibriumMean = math.Log2(SGtot/float64(len(path.T)))
+    case "Log":
+      for _,sgval := range SGtran[i]{
+        SGcounts[fmt.Sprintf("%f",math.Log(sgval))] += 1.0/float64(len(path.T))
+        SGtot += sgval
+      }
+      reg.LocalEquilibriumFreq = SGcounts
+      reg.LocalEquilibriumMean = math.Log(SGtot/float64(len(path.T)))
+    case "Log10":
+      for _,sgval := range SGtran[i]{
+        SGcounts[fmt.Sprintf("%f",math.Log10(sgval))] += 1.0/float64(len(path.T))
+        SGtot += sgval
+      }
+      reg.LocalEquilibriumFreq = SGcounts
+      reg.LocalEquilibriumMean = math.Log10(SGtot/float64(len(path.T)))
+    default:
+      for _,sgval := range SGtran[i]{
+        SGcounts[fmt.Sprintf("%f",sgval)] += 1.0/float64(len(path.T))
+        SGtot += sgval
+      }
+      reg.LocalEquilibriumFreq = SGcounts
+      reg.LocalEquilibriumMean = SGtot/float64(len(path.T))
+    }
+
+
+    phiSums := make([]float64,len(path.T))
+    for ti := 0; ti < len(path.T); ti ++{
+      summ := 0.0
+      for l,k := range genes[i].Philoc{
+        summ += path.B[ti][k]*genes[i].Phival[l]
+      }
+      phiSums[ti] = summ
+    }
+
+    phiSumCounts := make(map[string]float64)
+    totphiSum := 0.0
+    for _,psval := range phiSums{
+      phiSumCounts[fmt.Sprintf("%f",psval)] += 1.0/float64(len(path.T))
+      totphiSum += psval
+    }
+    reg.RegulationSumFreq = phiSumCounts
+    reg.RegulationMean = totphiSum/float64(len(path.T))
+
+    reginfo := make(map[string]Regulation)
+
+    // fmt.Println(genes[i].GeneID)
+    // fmt.Println(genes[i].Phival)
+    for l,k := range genes[i].Philoc{
+      whichtfs := make(map[string]float64)
+      for tfj,tfi := range sites[k].Kaploc{
+        whichtfs[genes[tfi].GeneID] = sites[k].Kapval[tfj]
+      }
+      totOn := 0.0
+      for ti := 0; ti < len(path.T); ti ++{
+        totOn += Btran[k][ti]
+      }
+      reginfo[sites[k].Aid + "-B" + strconv.Itoa(k)] = Regulation{sites[k].Aid,whichtfs,genes[i].Phival[l],totOn/float64(len(path.T))}
+    }
+
+    reg.RegulatorInfo = reginfo
+
+    TheReg[reg.GeneID] = reg
+  }
+  return TheReg
+}
+
+
+
+
 //  FUNCTION TO GET FAKE DATA
 // ------------------------------------------------------------------------------------
 //create set of samples of gene expression from model - useful to make fake data
@@ -2093,6 +2268,14 @@ func main(){
 
   var eq_dist_spread float64
   flag.Float64Var(&eq_dist_spread,"EqWindow",4,"Radius of equilibrium distribution to compute in units of standard deviation (i.e. number of standard deviations above & below mean to compute distribution).")
+
+
+  var doTranscriptVals bool
+  flag.BoolVar(&doTranscriptVals, "EqTranscript",true,"Whether or not to return transcript values of equilibrium distribution. If false, only return regulator info.")
+
+  var UseInputTranscript bool
+  flag.BoolVar(&UseInputTranscript, "InputTranscript",false,"Whether or not to use the sample value of unregulated gene transcript in equilibrium calculation. If false, uses average from training data.")
+
 
   flag.Parse()
 
@@ -2225,6 +2408,8 @@ func main(){
 
 
 
+  }else{
+    fmt.Println("No Data File Found (Ignore warning if this was on purpose).")
   }
 
   switch choice {
@@ -2242,15 +2427,28 @@ func main(){
         thesites[i].Nu = rand.Float64() - 0.5
       }
       fmt.Println("[ParamFit] Generating random initial parameters for genes.")
+      mnHold := make([]float64,len(data_points))
+      var mnTranscript float64
       for i,gn := range thegenes{
         sm := 0.0
+        totPhi := 0.0
         for _,v := range gn.Phival{
+          totPhi = totPhi + 1.0
           if v < 0{
             sm = sm - v
           }
         }
-        thegenes[i].Gamma = rand.Float64() + sm
-        thegenes[i].Dil = rand.Float64()/100
+        for ii,dat := range data_points{
+          mnHold[ii] = dat.Transcript[gn.GeneID]
+        }
+        mnTranscript,_ = stats.Mean(mnHold)
+        thegenes[i].Gamma = (sm+1)
+        switch{
+        case mnTranscript < math.Pow(10,-10):
+          thegenes[i].Dil = 100*(sm+1)
+        default:
+          thegenes[i].Dil = (sm+1)/mnTranscript
+        }
       }
 
 
@@ -2284,21 +2482,24 @@ func main(){
       }
 
       fmt.Printf("[ParamFit] Running MasterFit with %d randoms.\n", numrands)
-      fitsites,fitgenes,fitlikelihoods := MasterFit(thesites, thegenes, data_points, 0.1,dBand, randoms,toolong,whenQuit,numbercores)
+      fitsites,fitgenes,fitlikelihoods,DataSumm := MasterFit(thesites, thegenes, data_points, 0.1,dBand, randoms,toolong,whenQuit,numbercores)
 
       var flnm1 string
       var flnm2 string
       var flnm3 string
+      var flnm4 string
 
 
       if strings.HasSuffix(savefl,".json"){
         flnm1 = savefl[:len(savefl)-5] + "_sites" + savefl[len(savefl)-5:]
         flnm2 = savefl[:len(savefl)-5] + "_genes" + savefl[len(savefl)-5:]
         flnm3 = savefl[:len(savefl)-5] + "_likelihoods" + savefl[len(savefl)-5:]
+        flnm4 = savefl[:len(savefl)-5] + "_GeneData" + savefl[len(savefl)-5:]
       }else{
         flnm1 = savefl + "_sites.json"
         flnm2 = savefl + "_genes.json"
         flnm3 = savefl + "_likelihoods.json"
+        flnm4 = savefl + "_GeneData.json"
       }
 
       //site parameters from fitting saved as .json
@@ -2326,6 +2527,11 @@ func main(){
 
     	_ = ioutil.WriteFile(flnm3, fitlikesfl, 0644)
 
+      //Summary of Gene Data used during parameter fitting saved as .json
+      fitDatafl, _ := json.Marshal(DataSumm)
+
+
+    	_ = ioutil.WriteFile(flnm4, fitDatafl, 0644)
 
     }else{
       fmt.Println("Data File Missing")
@@ -2371,6 +2577,7 @@ func main(){
       }
       fake_data_points[i].Transcript = transc_map
       fake_data_points[i].Alpha = alpha_map
+      fake_data_points[i].Label = fmt.Sprintf("Fake%d",i)
     }
 
 
@@ -2463,9 +2670,9 @@ func main(){
 
 
 
-      loglikelihood,nojumps,avgtimes := TotalLike(thesites,thegenes,data_points,randoms,dBand,jumping_ones,final_mean)
+      loglikelihood,nojumps,avgtimes,totalDist := TotalLike(thesites,thegenes,data_points,randoms,dBand,jumping_ones,final_mean)
 
-      fmt.Printf("Log-Likelihood of was %0.5f, average simulation did not jump on %0.5f/%d attempts, average simulation time length was %0.5f\n",loglikelihood,nojumps,estlength, avgtimes)
+      fmt.Printf("Log-Likelihood of was %0.5f\n, average simulation did not jump on %0.5f/%d attempts,\n average simulation time length was %0.5f,\n Average distance from data to realization was %0.5f\n",loglikelihood,nojumps,estlength, avgtimes,totalDist)
     }else{
       fmt.Println("Data File Missing")
     }
@@ -2483,107 +2690,152 @@ func main(){
         for j,_ := range thesites{
           thesites[j].Alpha = dp.Alpha[thesites[j].Aid]
         }
+
+        if UseInputTranscript{
+          for i,gn := range thegenes{
+            if len(gn.Philoc) == 0{
+              thegenes[i].Dil = 10
+              thegenes[i].Gamma = dp.Transcript[gn.GeneID]*10
+            }
+          }
+        }
+
+        if doTranscriptVals{
+          eq_samples := GetEquilibriumTimeAvg(thesites,thegenes,distres,qudpts,eqLength,dBand,burnjumps,datascale,eq_dist_spread)
+
+          for j,gen := range eq_samples{
+            for k,val := range gen.DistEst{
+              if math.IsInf(val,0){
+                eq_samples[j].DistEst[k] = -1.0
+                fmt.Printf("%s has Inf value\n",gen.GeneID)
+              }
+              if math.IsNaN(val){
+                eq_samples[j].DistEst[k] = -2.0
+                fmt.Printf("%s has NaN value\n",gen.GeneID)
+              }
+            }
+            for k,val := range gen.RealMeans{
+              if math.IsInf(val,0){
+                eq_samples[j].RealMeans[k] = -1.0
+                fmt.Printf("%s has Inf value\n",gen.GeneID)
+              }
+              if math.IsNaN(val){
+                eq_samples[j].DistEst[k] = -2.0
+                fmt.Printf("%s has NaN value\n",gen.GeneID)
+              }
+            }
+            for k,val := range gen.RealVars{
+              if math.IsInf(val,0){
+                eq_samples[j].RealVars[k] = -1.0
+                fmt.Printf("%s has Inf value\n",gen.GeneID)
+              }
+              if math.IsNaN(val){
+                eq_samples[j].DistEst[k] = -2.0
+                fmt.Printf("%s has NaN value\n",gen.GeneID)
+              }
+            }
+          }
+
+
+
+
+          eq_file,err := json.Marshal(eq_samples)
+
+
+          if err != nil{
+            fmt.Printf("Sample %s json encoding error (transcript distribution): %s \n", dp.Label ,err)
+          }
+
+
+          var flnm string
+          if strings.HasSuffix(savefl,".json"){
+            flnm = savefl[:len(savefl)-5] + "_transcript_"+dp.Label + ".json"
+          }else{
+            flnm = savefl + "_transcript_"+dp.Label+".json"
+          }
+
+
+          _ = ioutil.WriteFile(flnm, eq_file, 0644)
+        }
+        eqRegulation := GetEquilibriumOnOff(thesites,thegenes,eqLength,burnjumps,datascale)
+        eq_file,err := json.Marshal(eqRegulation)
+        if err != nil{
+          fmt.Printf("Sample %s json encoding error (regulation information): %s \n", dp.Label ,err)
+        }
+        var flnm string
+        if strings.HasSuffix(savefl,".json"){
+          flnm = savefl[:len(savefl)-5] + "_regulation_"+dp.Label + ".json"
+        }else{
+          flnm = savefl + "_regulation_"+dp.Label+".json"
+        }
+
+
+        _ = ioutil.WriteFile(flnm, eq_file, 0644)
+
+      }
+    }else{
+
+      if doTranscriptVals{
         eq_samples := GetEquilibriumTimeAvg(thesites,thegenes,distres,qudpts,eqLength,dBand,burnjumps,datascale,eq_dist_spread)
 
 
-
         for j,gen := range eq_samples{
-          for k,val := range gen.DistEst{
+          for i,val := range gen.DistEst{
             if math.IsInf(val,0){
-              eq_samples[j].DistEst[k] = -1.0
-              fmt.Printf("%s has Inf value\n",gen.GeneID)
-            }
-            if math.IsNaN(val){
-              eq_samples[j].DistEst[k] = -2.0
-              fmt.Printf("%s has NaN value\n",gen.GeneID)
-            }
-          }
-          for k,val := range gen.RealMeans{
-            if math.IsInf(val,0){
-              eq_samples[j].RealMeans[k] = -1.0
-              fmt.Printf("%s has Inf value\n",gen.GeneID)
-            }
-            if math.IsNaN(val){
-              eq_samples[j].DistEst[k] = -2.0
-              fmt.Printf("%s has NaN value\n",gen.GeneID)
-            }
-          }
-          for k,val := range gen.RealVars{
-            if math.IsInf(val,0){
-              eq_samples[j].RealVars[k] = -1.0
-              fmt.Printf("%s has Inf value\n",gen.GeneID)
-            }
-            if math.IsNaN(val){
-              eq_samples[j].DistEst[k] = -2.0
-              fmt.Printf("%s has NaN value\n",gen.GeneID)
+              eq_samples[j].DistEst[i] = -1.0
             }
           }
         }
 
+        for j,gen := range eq_samples{
+          for i,val := range gen.RealMeans{
+            if math.IsInf(val,0){
+              eq_samples[j].RealMeans[i] = -1.0
+            }
+          }
+        }
 
-
+        for j,gen := range eq_samples{
+          for i,val := range gen.RealVars{
+            if math.IsInf(val,0){
+              eq_samples[j].RealVars[i] = -1.0
+            }
+          }
+        }
 
         eq_file,err := json.Marshal(eq_samples)
 
-
         if err != nil{
-          fmt.Printf("Sample %s json encoding error: %s \n", dp.Label ,err)
+          fmt.Printf("json encoding error (transcript): %s \n" ,err)
         }
-
 
         var flnm string
         if strings.HasSuffix(savefl,".json"){
-          flnm = savefl[:len(savefl)-5] + "_"+dp.Label + ".json"
+          flnm = savefl[:len(savefl)-5] + "_transcript.json"
         }else{
-          flnm = savefl + "_"+dp.Label+".json"
+          flnm = savefl + "_transcript.json"
         }
 
 
         _ = ioutil.WriteFile(flnm, eq_file, 0644)
       }
-    }else{
-      eq_samples := GetEquilibriumTimeAvg(thesites,thegenes,distres,qudpts,eqLength,dBand,burnjumps,datascale,eq_dist_spread)
-
-
-      for j,gen := range eq_samples{
-        for i,val := range gen.DistEst{
-          if math.IsInf(val,0){
-            eq_samples[j].DistEst[i] = -1.0
-          }
-        }
-      }
-
-      for j,gen := range eq_samples{
-        for i,val := range gen.RealMeans{
-          if math.IsInf(val,0){
-            eq_samples[j].RealMeans[i] = -1.0
-          }
-        }
-      }
-
-      for j,gen := range eq_samples{
-        for i,val := range gen.RealVars{
-          if math.IsInf(val,0){
-            eq_samples[j].RealVars[i] = -1.0
-          }
-        }
-      }
-
-      eq_file,err := json.Marshal(eq_samples)
-
+      eqRegulation := GetEquilibriumOnOff(thesites,thegenes,eqLength,burnjumps,datascale)
+      eq_file,err := json.Marshal(eqRegulation)
       if err != nil{
-        fmt.Printf("json encoding error: %s \n" ,err)
+        fmt.Printf("json encoding error (regulation information): %s \n" ,err)
       }
-
       var flnm string
       if strings.HasSuffix(savefl,".json"){
-        flnm = savefl
+        flnm = savefl[:len(savefl)-5] + "_regulation.json"
       }else{
-        flnm = savefl + ".json"
+        flnm = savefl + "_regulation.json"
       }
 
 
       _ = ioutil.WriteFile(flnm, eq_file, 0644)
+
+
+
     }
 
 

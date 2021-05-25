@@ -1,0 +1,2 @@
+gene_gene_network=examplenetwork.csv
+region_info=examplesites.tsv
