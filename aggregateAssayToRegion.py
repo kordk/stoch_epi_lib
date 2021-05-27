@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 
 # kord.kober@ucsf.edu
 
@@ -12,7 +12,12 @@ DEBUG=0
 ## Only look at Promoter and TSS sites as TFBS for now
 labelsToEvalH={
     "TSS":1, 
-    "Promoter":1
+    "Promoter":1,
+    "DISTAL":0,
+    "IN":0,
+    "BETWEEN":0,
+    "Mult. Closer/TSS/BTW":0,
+    "TRANS":0
 }
 
 def get_size(obj, seen=None):
@@ -70,9 +75,8 @@ def loadAssayData(afn):
     return assayFileName,probesMatchH
 
 
-def readAnnotatioFileToDict(annFileName):
-    "process the assay file for regions"
-    annA = []
+def readAnnotationFileToDict(annFileName):
+    "read annotation file"
     annFP = open(annFileName,"r")
     annH={}
     probesH={}
@@ -83,37 +87,32 @@ def readAnnotatioFileToDict(annFileName):
     # cg00000289  15              41809627         RPAP1       TRANS
     # cg00000363  4               146055861        OTUD4       TRANS
 
+    annA = []
     for line in annFP:
         annA = line.strip('\n').split('\t')
+        # ['cg02594940', '19', '35759230', 'USF2', 'TSS']
+        if DEBUG: print("[readAnnotationFileToDict] annotation line:",annA)
         probe = annA[0]
         chrom = annA[1]
         start = annA[2]
-        gene = annA[3]
+        gene  = annA[3]
         label = annA[4]
-
-        #if not annH.has_key(probe):
-        #    annH[probe]={}
-        #    probesH[probe]=1
-        #if not annH[probe].has_key(gene):
-        #    annH[probe][gene]={}
-        #if not annH[probe][gene].has_key(label):
-        #    annH[probe][gene][label]={}
-        #if not annH[probe][gene][label].has_key("pos"):
-        #    annH[probe][gene][label]["pos"]=[]
-        #annH[probe][gene][label]["pos"].append(str(chrom+":"+start))
-        #if DEBUG: print "[readAnnotatioFileToDict]",probe,annH[probe])
         
         if gene not in annH:
             annH[gene]={}
         if label not in annH[gene]:
             annH[gene][label]={}
-            probesH[probe]=1
+        probesH[probe]=1
         if probe not in annH[gene][label]:
             annH[gene][label][probe]={}
         if "pos" not in annH[gene][label][probe]:
             annH[gene][label][probe]["pos"]=[]
+
         annH[gene][label][probe]["pos"].append(str(chrom+":"+start))
         if DEBUG: print("[readAnnotatioFileToDict]",gene,annH[gene])
+        
+    print("[readAnnotationFileToDict] found",len(annH),"genes and",len(probesH),"probes")
+    #sys.exit(55)
     return annH,probesH
 
 
@@ -122,7 +121,7 @@ def usage(errorNum):
     print("""
 aggregateAssayToRegion.py - aggregate assays in a region of a gene"
 
-usage: aggregateAssayToRegion [hD] -a <annotation file> -d <gzip'd metylation data file> -s <combination score method: [ average ]>"
+usage: aggregateAssayToRegion [hD] -a <annotation file> -d <gzip'd metylation data file> -s <combination score method: [ none | mean | median ]>"
 
 annotation file format:
  assayName,chrom,position,gene,label
@@ -171,9 +170,9 @@ def main(argv):
         
     if combineScoreMethod == "":
         usage(204)
-    
+
     ## read in the  annotation file and collect the probe names for inclusion
-    (assaysForGeneRegionH,probesAnnotH)=readAnnotatioFileToDict(annotationFileName)
+    (assaysForGeneRegionH,probesAnnotH)=readAnnotationFileToDict(annotationFileName)
     print("Found",len(probesAnnotH),"eCpG probes in annotation.")
 
     ## process each gene
@@ -187,20 +186,38 @@ def main(argv):
             if label not in dataH:
                 if DEBUG: print(label,"Not found.")
                 continue
-            if DEBUG: print("Merging",label,dataH[label])
-            ## check distance (sliding window?)
+            if labelsToEvalH[label] == 0:
+                if DEBUG: print("Skipping label:",label)
+                continue
+                    ## check distance (sliding window?)
             if gene not in probeMergeH:
                 probeMergeH[gene]={}
-            ## name it
-            rname=label+"_"+"-".join(dataH[label].keys())
-            probeMergeH[gene][rname]=[]
-            probeMergeH[gene][rname].append(dataH[label].keys())
-            if DEBUG: print("Merged",rname,label,gene,probeMergeH[gene])
+            if combineScoreMethod != "none":
+                if DEBUG: print("Merging",label,dataH[label])
+                ## name it
+                rname=label+"_"+"-".join(dataH[label].keys())
+                probeMergeH[gene][rname]=[]
+                probeMergeH[gene][rname].append(dataH[label].keys())
+                if DEBUG: print("Merged:",rname,label,gene,probeMergeH[gene][rname])
+            else:
+                if DEBUG: print("Not merging",label,dataH[label])
+                for loci in dataH[label].keys():
+                    ## name it
+                    xdataH={}
+                    xdataH[label]={}
+                    xdataH[label][loci]=dataH[label][loci]
+                    if DEBUG: print("Not merging",label,xdataH[label])
+                    rname=label+"_"+loci
+                    probeMergeH[gene][rname]=[]
+                    probeMergeH[gene][rname].append(xdataH[label].keys())
+                    if DEBUG: print("UnMerged:",rname,label,gene,probeMergeH[gene][rname])
+                    
         n+=1
-        #if n == 25:
+        sys.stdout.flush()
+        #if n == 50:
         #    print("***WARNING. Pre-maturely terminating processing of annotation data. Are you debugging?")
         #    break
-    print("Merged probes into",len(probeMergeH),"regions.")
+    print("Merged probes for",len(probeMergeH)+1,"genes.")
             
         
     ## cache the assay data from file
@@ -227,10 +244,12 @@ def main(argv):
             print("Adding chunk to arrayData",c,chunk.shape)
             arrayData = arrayData.append(chunk)
         #print "arrayData",arrayData
+        sys.stdout.flush()
         c+=1
         #if c == 5:
         #    print("***WARNING. Pre-maturely terminating processing of assay data. Are you debugging?")
         #    break
+
     #print "arrayData",arrayData
     print("arrayData",arrayData.shape)
     s=get_size(arrayData)
@@ -239,22 +258,27 @@ def main(argv):
     arrayData = arrayData.loc[:,~arrayData.columns.str.startswith('Detection')]
     print("arrayData",arrayData.shape)
     print("Cached array data for eCpG probes (",s/1024,"Kbytes)."  )
-    print("Reseting index.")
+    print("Resetting index.")
     arrayData.set_index('probe', inplace=True)
     #print arrayData.columns
-
+    sys.stdout.flush()
+    
     ## Merge regions for the array data
     regionData = pd.DataFrame(columns=arrayData.columns)
-    regionAnnotation = pd.DataFrame(columns={'region','annotProbes','annotCount','arrayProbes','arrayCount'})
+    #regionAnnotation = pd.DataFrame(columns={'region','annotProbes','annotCount','arrayProbes','arrayCount'})
+    regionAnnotation = pd.DataFrame(columns={'gene','annotProbes','annotCount','arrayProbes','arrayCount'})
     for gene,regionH in probeMergeH.items():
         for region,probesA in regionH.items():
-            #print("Collecting array data for",gene,region,probesA)
+            print("Collecting array data for",gene,region,probesA)
             if len(probesA) > 1:
                 print("***NOTICE:",gene,region,"has mulitple probe sets:",probesA)
                 print("        Using only the first.")
-            regionAnnotation.at[gene,'region'] = region
-            regionAnnotation.at[gene, 'annotProbes'] = ','.join(probesA[0])
-            regionAnnotation.at[gene, 'annotCount'] = len(probesA[0])
+            #regionAnnotation.at[gene,'region'] = region
+            #regionAnnotation.at[gene, 'annotProbes'] = ','.join(probesA[0])
+            #regionAnnotation.at[gene, 'annotCount'] = len(probesA[0])
+            regionAnnotation.at[region, 'gene'] = gene
+            regionAnnotation.at[region, 'annotProbes'] = ','.join(probesA[0])
+            regionAnnotation.at[region, 'annotCount'] = len(probesA[0])
             #print(regionAnnotation)
             regionData.loc[region] = [None] * len(regionData.columns)
             for pid in arrayData.columns:
@@ -274,14 +298,25 @@ def main(argv):
                     #print("***NOTICE: score not found for",probe,pid,scoresA)
                     score=None
                 if len(scoresA) > 1:
-                    score=stats.mean(scoresA)
+                    if combineScoreMethod == "mean":
+                        score=stats.mean(scoresA)
+                    elif combineScoreMethod == "median":
+                        score=stats.median(scoresA)
+                    else:
+                        print("Merge score not specified, using median.")
+                        score=stats.median(scoresA)
+                        
                 regionData.at[region, pid]=score
-                regionAnnotation.at[gene, 'arrayProbes'] = ','.join(arrayProbes)
-                regionAnnotation.at[gene, 'arrayCount'] = len(arrayProbes)
+                #regionAnnotation.at[gene, 'arrayProbes'] = ','.join(arrayProbes)
+                #regionAnnotation.at[gene, 'arrayCount'] = len(arrayProbes)
+                regionAnnotation.at[region, 'arrayProbes'] = ','.join(arrayProbes)
+                regionAnnotation.at[region, 'arrayCount'] = len(arrayProbes)
+
             #if len(scoresA) > 1:
                 #print("Region",gene,region,"has >1 probe in the array data:",probesA[0])
             if len(scoresA) == 0:
                 print("Region",gene,region,"has no probes in the array data:",probesA[0])
+            sys.stdout.flush()
             #print regionData
             #print(regionAnnotation)
         #print("Completed region(s) for",gene,regionData.shape)
@@ -291,15 +326,21 @@ def main(argv):
     
 
     ## Save the region information
-    outFileName="regionAggregateInfo.tsv.gz"
+    #outFileName="regionAggregateInfo.tsv.gz"
+    outFileName="regionAggregateInfo.tsv"
     print("Saving aggregated information to:",outFileName)
-    regionAnnotation.to_csv(outFileName, sep='\t', float_format='%.4f', index_label="gene", compression='gzip')
+    #regionAnnotation.to_csv(outFileName, sep='\t', float_format='%.4f', index_label="gene", compression='gzip')
+    regionAnnotation.to_csv(outFileName, sep='\t', float_format='%.4f', index_label="gene")
+    regionAnnotation.to_csv("regionAnnotation.pkl")
 
    
     ## export the data
-    outFileName="regionAggregateData.csv.gz"
+    #outFileName="regionAggregateData.csv.gz"
+    outFileName="regionAggregateData.csv"
     print("Saving aggregated data to:",outFileName)
-    regionData.to_csv(outFileName, sep=',', float_format='%.4f', index_label="region", compression='gzip')
+    #regionData.to_csv(outFileName, sep=',', float_format='%.4f', index_label="region", compression='gzip')
+    regionData.to_csv(outFileName, sep=',', float_format='%.4f', index_label="region")
+    regionData.to_csv("regionData.pkl")
     
     
 #### Start here. #######################################

@@ -79,7 +79,7 @@ def main(argv):
     import simplejson as json
     import matplotlib.pyplot as plt  
     import matplotlib.cm as cm
-    # for RSME
+    # for RMSE
     from sklearn.metrics import mean_squared_error
     from math import sqrt
 
@@ -117,7 +117,7 @@ def main(argv):
     print("Found",gA.size,"unique genes across all folds.")
     if DEBUG: print(foldsH)
 
-    ## collect RSME for each gene across shuffles
+    ## collect RMSE for each gene across shuffles
     dfRmse = pd.DataFrame(columns=['Gene', 'Shuffle', 'RMSE'])
 
     ## plot predicted vs observed 
@@ -151,24 +151,54 @@ def main(argv):
             x = np.asarray(results['gxEst'])
             y = np.asarray(results['gxObs'])
             v = np.asarray(results['gxRes'])
-
+            
+            ## set the color for this individual
             c = colors[int(f)]
-            ax.scatter(np.log2(x),np.log2(y), c=c, s=2)
+            ## https://stackoverflow.com/questions/55109716/c-argument-looks-like-a-single-numeric-rgb-or-rgba-sequence/61479357
+            c = np.array([c])
+            print("Color", g, f, c)
+            
+            ## Check for missing values
+            if DEBUG: print("Check X for Nan:",np.isnan(np.log2(x)))
+            print("Predicted (X)", g, "shuffle", f, "min=", round(np.min(x),2), "mean=", round(np.mean(x),2), 
+                "median=", round(np.median(x)), "max=", round(np.max(x)), "count=", len(x))
+            if DEBUG: print(x)
+            if DEBUG: print(np.log2(x))
+            if DEBUG: print("Check Y for Nan:",np.isnan(np.log2(y)))
+            print("Observed  (Y)", g, "shuffle", f, "min=", round(np.min(y),2), "mean=", round(np.mean(y),2), 
+                "median=", round(np.median(y)), "max=", round(np.max(y)), "count=", len(x))
+            if DEBUG: print(y)
+            if DEBUG: print(np.log2(y))
+            #sys.exit(110)
+
+            ## Observed vs. Predicted
+            ## log2
+            #ax.scatter(np.log2(x),np.log2(y), c=c, s=2)
+            ## no log2
+            ax.scatter(x,y, c=c, s=2)
+            
+            ## Predicted vs. Residual
             ## Residual = Observed – Predicted
+            ## log2
+            #axResPred.scatter( 
+            #    np.log2(x),
+            #    np.log2(y)-np.log2(x),
+            #    c=c, s=2)
+            ## no log2
             axResPred.scatter( 
-                np.log2(x),
-                np.log2(y)-np.log2(x),
+                x,
+                y - x,
                 c=c, s=2)
             
             ## add to the legend
             my_points.append(Line2D([0], [0], marker='.', color=c, lw=2))
             pntsResPred.append(Line2D([0], [0], marker='.', color=c, lw=2))
 
-            ## calculate RSME
+            ## calculate RMSE
             #rmse = sqrt(mean_squared_error(y_actual, y_predicted))
             rmse = sqrt(mean_squared_error(y, x))
             dfRmse = dfRmse.append({'Gene': g, 'Shuffle': f, 'RMSE': rmse}, ignore_index=True)
-            print("RSME",g,"shuffle",f,rmse)
+            print("RMSE",g,"shuffle",f,rmse)
 
             #break
 
@@ -176,12 +206,16 @@ def main(argv):
         dfr = dfRmse.loc[dfRmse['Gene']==g]
         #print(dfr)
         print(dfr['RMSE'])
-        print("Mean RSME for ",g,dfr['RMSE'].mean)
+        print("Mean RMSE for",g,dfr['RMSE'].mean)
 
         print(my_points)
         ax.set_title(str(g))
-        ax.set_xlabel("Predicted log2(Expression)")
-        ax.set_ylabel("Observed log2(Expression)")
+        ## log2
+        #ax.set_xlabel("Predicted log2(Expression)")
+        #ax.set_ylabel("Observed log2(Expression)")
+        ## no log2
+        ax.set_xlabel("Predicted Expression")
+        ax.set_ylabel("Observed Expression")
         if smallRange:
             ## use data to set limits
             lims = [
@@ -211,8 +245,12 @@ def main(argv):
 
         print(pntsResPred)
         axResPred.set_title(str(g))
-        axResPred.set_xlabel("Predicted log2(Expression)")
-        axResPred.set_ylabel("Residuals = log2(Obs) - Log2(Pred)")
+        ## log2
+        #axResPred.set_xlabel("Predicted log2(Expression)")
+        #axResPred.set_ylabel("Residuals = log2(Obs) - Log2(Pred)")
+        ## no log2
+        axResPred.set_xlabel("Predicted Expression")
+        axResPred.set_ylabel("Residuals = Obs - Pred")
         ## hard set limits
         if smallRange:
             ## use data to set limits

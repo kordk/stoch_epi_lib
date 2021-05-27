@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 
 # kord.kober@ucsf.edu
 
@@ -48,14 +48,14 @@ def readProbeAnnotToDict(fn):
     for line in annFP:
         annA = line.strip('\n').split('\t')
         if len(annA) == 4:
-            geneH[annA[3]] = annA[2] # Entrez_Gene_ID
+            geneH[str(annA[3]).strip()] = str(annA[2]).strip() # Entrez_Gene_ID
             #geneH[annA[3]] = annA[1] # RefSeq_ID
             #geneH[annA[3]] = annA[0] # ILMN_Gene
 
-    print("[readProbeAnnotToDict] Probe ID: ILMN_1762337 -> ENTREZ:", geneH['ILMN_1762337'])
-    print("[readProbeAnnotToDict] Loaded,",len(geneH.keys()),"Probe Ids.")
-
-    print("[readProbeAnnotToDict] Probe ID: ILMN_1762337 -> 920?", geneH['ILMN_1727284'])
+    #print("[readProbeAnnotToDict] Probe ID: ILMN_1762337 -> ENTREZ:", geneH['ILMN_1762337'])
+    print("[readProbeAnnotToDict] Loaded",len(geneH.keys()),"Probe Ids.")
+    print("[readProbeAnnotToDict] geneH:", dict(list(geneH.items())[:3]))
+    #print("[readProbeAnnotToDict] Probe ID: ILMN_1762337 -> 920?", geneH['ILMN_1727284'])
     return geneH
 
 def readSymbolAnnotToDict(fn):
@@ -72,34 +72,48 @@ def readSymbolAnnotToDict(fn):
     print("[readSymbolAnnotToDict] Mapping [ENTREZ Gene ID] -> Symbol.")
     for line in annFP:
         annA = line.strip('\n').split('\t')
-        symH[str(annA[2])] = annA[1] # symbol
+        symH[str(annA[2]).strip()] = annA[1] # symbol
 
     
     print("[readSymbolAnnotToDict] keys:", list(symH.keys())[0:4])
+    print("[readSymbolAnnotToDict] ENTREZ ID: Symbol", dict(list(symH.items())[:5]))
     print("[readSymbolAnnotToDict] ENTREZ ID: 346389 -> Symbol:", symH['346389'])
     print("[readSymbolAnnotToDict] Loaded,",len(symH.keys()),"ENTREZ IDs.")
-
+    print("[readSymbolAnnotToDict] ENTREZ ID: 1 -> A1BG?", symH['1'])
     print("[readSymbolAnnotToDict] ENTREZ ID: 920 -> CD4?", symH['920'])
+
     return symH
 
 def updateGeneNames(pfn,sfn,df):
     probeH = readProbeAnnotToDict(pfn)
     symbolH = readSymbolAnnotToDict(sfn)
+    print("[updateGeneNames] Loaded,",len(symbolH.keys()),"ENTREZ IDs.")
+    print("[updateGeneNames] ENTREZ ID: 1 -> A1BG?", symbolH['1'])
 
     print("[updateGeneNames] Mapping [ENTREZ Gene ID] -(Probes)-> Symbol.")
     p2sH={}
     ## get the ENTREZ ID for the probe
     m=0
     for p,e in probeH.items():
+        #print("[updateGeneNames] Looking for probe",p,"ENTREZ",e, str(e), str(e).strip(),symbolH[str(e).strip()])
         if not e in symbolH:
             m+=1
             continue
         p2sH[p]=symbolH[e] ## set the HUGO symbol for the ENTREZ ID
         
-    print("[updateGeneNames] Probe ID: ILMN_1762337 -> Symbol:", p2sH['ILMN_1762337'])
+
     print("[updateGeneNames] Annotated",len(p2sH),"probes. Failed to annotate",m,"probes.")
-    
+    print("[updateGeneNames] p2sH:", dict(list(p2sH.items())[:3]))
+
+    print("[updateGeneNames] Quick verification of lookup hash. If this fails, you may need to update the code to comment out the appropriate test.")
+
+    # use with Illumina array
+    print("[updateGeneNames] Probe ID: ILMN_1762337 -> Symbol:", p2sH['ILMN_1762337'])
     print("[updateGeneNames] Probe ID: ILMN_1727284 -> CD4?:", p2sH['ILMN_1727284'])
+
+    # use with RNAseq
+    #print("[updateGeneNames] Probe ID: 1 -> Symbol:", p2sH['1'])
+    #print("[updateGeneNames] Probe ID: 7398 -> USP1?:", p2sH['7398'])
 
     print("[updateGeneNames] Annotating probes as HUGO symbols.")
     df.replace({'Probe_ID':p2sH}, inplace=True)
@@ -136,7 +150,7 @@ def loadGxData(fn,detPval):
 
     #co = 0.05
     co = float(detPval)
-    print("[loadGxData] Filtering out probes with Detection pvalue <",co)
+    print("[loadGxData] Attempting to filter out probes with Detection pvalue <",co)
 
     c=0
     dropArrayNames = []
@@ -147,20 +161,28 @@ def loadGxData(fn,detPval):
         ## collect the column names
         ## axis=1: evaluate across the rows (i.e., row minimum)
         dcols = list(chunk.filter(regex='^Detection pvalue_', axis=1))
-        #print(dcols)
-
+        print(dcols)
+        
         ## Filter out probes which were not expressed (detection < cutoff 'co') in any sample
         ## record and output?
         nfilt = chunk[dcols].min(axis=1) < co
         print("[loadGxData] Chunk",c,"detection filter (<",co,"):\n", nfilt.value_counts())
+        if DEBUG: print(nfilt.head())
 
-        cDrop = chunk.loc[chunk[dcols].min(axis=1) > co]
-        #print(cDrop.columns.to_numpy().tolist())
-        #dropArrayNames = cDrop[['Probe_ID']].values
-        dropArrayNames = cDrop[['Probe_ID']].values.tolist()
-        print("[loadGxData]", dropArrayNames[1:10])
-
-        chunk = chunk.loc[chunk[dcols].min(axis=1) < co]
+        ## Test for missing values
+        ## all() checks wether all values in a list interpret to True, meaning, if at least one of them is False, it will return False
+        print(all(nfilt))
+        if all(nfilt):
+            print("[loadGxData] Chunk",c,"detection filter columns found.")
+            ## only drop if column is present for all samples
+            cDrop = chunk.loc[chunk[dcols].min(axis=1) > co]
+            #print(cDrop.columns.to_numpy().tolist())
+            #dropArrayNames = cDrop[['Probe_ID']].values
+            dropArrayNames = cDrop[['Probe_ID']].values.tolist()
+            chunk = chunk.loc[chunk[dcols].min(axis=1) < co]
+            print("[loadGxData]", dropArrayNames[1:10])
+        else:
+            print("[loadGxData] Chunk",c,"detection filter columns not found. Not performing detection filter.", chunk.shape)
 
         if c == 0:
             print("[loadGxData] Creating array df from first chunk")
@@ -170,7 +192,9 @@ def loadGxData(fn,detPval):
             arrayData = arrayData.append(chunk) 
         c+=1
         #if c == 5:
+        #    print("***\n***\n")
         #    print("***WARNING. Pre-maturely terminating processing of assay data. Are you debugging?")
+        #    print("***\n***\n")
         #    break
     #print("[loadGxData] info",arrayData.info(memory_usage='deep'))
 
@@ -197,8 +221,16 @@ def loadGxData(fn,detPval):
     new = np.array([re.sub('Average signal_','',a) for a in arrayData_nona.columns.values])
     arrayData_nona.columns = new.tolist()
     if DEBUG: print("[loadGxData] After:", arrayData_nona.columns.values)
+    print("[loadGxData] arrayData_nona:\n", arrayData_nona.head(n=5))
+    print("[loadGxData] arrayData_nona:\n", arrayData_nona.dtypes.head(n=5))
 
-    print("ILMN_1727284/CD4:", arrayData_nona.loc[arrayData_nona['Probe_ID']=="ILMN_1727284"], flush=True)
+    print("[loadGxData] Forcing string cast on Probe_ID column.")
+    arrayData_nona['Probe_ID'] = arrayData_nona['Probe_ID'].astype(str)
+    print("[loadGxData] arrayData_nona:\n", arrayData_nona.dtypes.head(n=5))
+
+    print("[loadGxData] [QC] ILMN_1727284/CD4:", arrayData_nona.loc[arrayData_nona['Probe_ID']=="ILMN_1727284"], flush=True)
+    print("[loadGxData] [QC] 1/A1BG:", arrayData_nona.loc[arrayData_nona['Probe_ID']=="1"], flush=True)
+
     return arrayData_nona
 
 def readSampleIdAnnotToDict(fn):
@@ -217,14 +249,16 @@ def readSampleIdAnnotToDict(fn):
 
     ## https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1868036
     ## Expect: 6164647041_R01C01 -> 6088
-    print("[readSampleIdAnnotToDict] 6164647041_R01C01 -> 6088?", df['6164647041_R01C01'].item())
+    #print("[readSampleIdAnnotToDict] 6164647041_R01C01 -> 6088?", df['6164647041_R01C01'].item())
 
     a=0
     for an in df.columns.values:
        a2sH[str(an)]=str(df[an].item())
        if DEBUG: print("[readSampleIdAnnotToDict] Loaded example:", an, df[an].item())
        #if a > 5:
+       #     print("***\n***\n")
        #     print("***WARNING. Pre-maturely terminating processing of array sample ID data. Are you debugging?")
+       #     print("***\n***\n")
        #     break
        a+=1
 
@@ -249,7 +283,9 @@ def loadMtData(mfn,afn):
 
         c+=1
         #if c == 5:
+        #    print("***\n***\n")
         #    print("***WARNING. Pre-maturely terminating processing of assay data. Are you debugging?")
+        #    print("***\n***\n")
         #    break
 
     print("[loadMtData] loaded shape:", arrayData.shape)
@@ -259,10 +295,11 @@ def loadMtData(mfn,afn):
     if DEBUG: print("[loadMtData] aidH['6164647041_R01C01']",aidH['6164647041_R01C01'])
     arrayData.rename(columns=aidH, inplace=True)
 
-    print("[loadMtData] Promoter_cg13512987-cg05044173 (before):", \
-        arrayData.loc[arrayData['region']=="Promoter_cg13512987-cg05044173"])
-    print("[loadMtData] Promoter_cg21689902-cg03673190 (before):", \
-        arrayData.loc[arrayData['region']=="Promoter_cg21689902-cg03673190"])
+    if DEBUG:
+        print("[loadMtData] Promoter_cg13512987-cg05044173 (before):", \
+            arrayData.loc[arrayData['region']=="Promoter_cg13512987-cg05044173"])
+        print("[loadMtData] Promoter_cg21689902-cg03673190 (before):", \
+            arrayData.loc[arrayData['region']=="Promoter_cg21689902-cg03673190"])
     
     ## Filter out probes with missing data (i.e., NaN)
     print("[loadMtData] Removing probes with missing data.") 
@@ -282,10 +319,11 @@ def loadMtData(mfn,afn):
     arrayData_nona = arrayData.dropna(how='any', axis=0)
     print("[loadMtData] final shape:", arrayData_nona.shape)
 
-    print("[loadMtData] Promoter_cg13512987-cg05044173 (after):", \
-        arrayData_nona.loc[arrayData_nona['region']=="Promoter_cg13512987-cg05044173"])
-    print("[loadMtData] Promoter_cg21689902-cg03673190 (after):", \
-        arrayData_nona.loc[arrayData_nona['region']=="Promoter_cg21689902-cg03673190"])
+    if DEBUG:
+        print("[loadMtData] Promoter_cg13512987-cg05044173 (after):", \
+            arrayData_nona.loc[arrayData_nona['region']=="Promoter_cg13512987-cg05044173"])
+        print("[loadMtData] Promoter_cg21689902-cg03673190 (after):", \
+            arrayData_nona.loc[arrayData_nona['region']=="Promoter_cg21689902-cg03673190"])
     
     print("[loadMtData]",arrayData_nona.head, flush=True)
     return arrayData_nona
@@ -298,6 +336,7 @@ mergeMatchingData.py - merge epigenetic and gene expression data matched to an i
 usage: mergeMatchingData.py [hD2m:g:d:p:s:]
     -2 log2 transform gene expression data
     -m gzip'd methylation data file
+    -a methylation sample name annotation
     -g gene expression data
     -d gene expression detection p-value cutoff
     -p Probe ID to ENTREZ annotation file name 
@@ -450,7 +489,9 @@ def main(argv):
                 iv = math.log2(row[pid])
             mergeH['Transcript'][row['Probe_ID']]=iv
             #if g > 5:
+            #    print("***\n***\n")
             #    print("***WARNING. Pre-maturely terminating transcript. Are you debugging?")
+            #    print("***\n***\n")
             #    break
             g+=1
 
@@ -461,16 +502,22 @@ def main(argv):
             #print("row:",pid,row.dtype,row['Probe_ID'],row[pid])
             mergeH['Alpha'][row['region']]=row[pid]
             #if m > 5: 
+            #    print("***\n***\n")
             #    print("***WARNING. Pre-maturely terminating methylation. Are you debugging?")
+            #    print("***\n***\n")
             #    break
             m+=1
 
         #if p > 5:
-            #print("***WARNING. Pre-maturely terminating merge. Are you debugging?")
-            #break
+        #    print("***\n***\n")
+        #    print("***WARNING. Pre-maturely terminating merge. Are you debugging?")
+        #    print("***\n***\n")
+        #    break
         if DEBUG: print("Merged data for sample",pid,mergeH)
         mergeA.append(mergeH)
-        print("Completed merge for sample",pid,mergeH.keys())
+        ky = list(mergeH.keys())
+        print("Completed merge for sample",p, pid, ky[0], len(mergeH[ky[0]]), ky[1], len(mergeH[ky[1]]), ky[2], len(mergeH[ky[2]]))
+        sys.stdout.flush()
         p+=1
        
     if DEBUG: print("Final merged array:", mergeA)
